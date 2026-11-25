@@ -756,7 +756,7 @@ loadNew2026();
     if(!Array.isArray(batch))continue;
     for(const track of batch){
      const key=String(track.id);
-     if(!key||seen.has(key)||!canStream(track))continue;
+     if(!key||seen.has(key)||!canStream(track)||!isRussianCatalogTrack(track))continue;
      const normalized=normalizeGenreTrack(track);
      const nameKey=(normalized.title+"|"+normalized.artist).toLocaleLowerCase().replace(/\s+/g," ").trim();
      if(seenNames.has(nameKey))continue;
@@ -783,7 +783,7 @@ loadNew2026();
    if(!Array.isArray(data))throw new Error("Audius вернул не список треков");
    for(let i=0;i<data.length;i++){
     const track=data[i];
-    if(!canStream(track))continue;
+    if(!canStream(track)||!isRussianCatalogTrack(track))continue;
     const normalized=normalizeGenreTrack(track);
     const id=String(normalized.id);
     const nameKey=(normalized.title+"|"+normalized.artist).toLocaleLowerCase().replace(/\s+/g," ").trim();
