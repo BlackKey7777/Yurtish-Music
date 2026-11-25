@@ -28,6 +28,8 @@ button{cursor:pointer}
 .info strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
 .info small{color:#999;display:block;margin-top:5px}
 .track button{background:#292632;border:0;color:white;border-radius:10px;padding:9px 11px}
+.track .favoriteBtn{min-width:40px;min-height:40px;font-size:22px;line-height:1;color:#aaa;background:#292632;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.track .favoriteBtn.is-favorite{color:#a855f7;background:#30223f}
 .empty{color:#888;text-align:center;padding:35px 10px}
 #player{position:fixed;bottom:0;left:0;right:0;background:#1b1922;border-top:1px solid #393340;padding:12px 16px calc(12px + env(safe-area-inset-bottom));z-index:20;pointer-events:auto}
 .player-top{display:flex;align-items:center;gap:12px}
@@ -173,12 +175,27 @@ function createTrackElement(track,queue=[]){
  info.append(title,artist);
 
  const play=document.createElement("button");
+ play.type="button";
  play.textContent="▶";
+ play.setAttribute("aria-label","Включить "+track.title);
  play.addEventListener("click",()=>playTrack(track,queue));
 
  const like=document.createElement("button");
+ like.type="button";
+ like.className="favoriteBtn"+(isFavorite(track)?" is-favorite":"");
  like.textContent=isFavorite(track)?"♥":"♡";
- like.addEventListener("click",()=>toggleFavorite(track));
+ like.setAttribute("aria-label",isFavorite(track)?"Убрать из избранного":"Добавить в избранное");
+ like.setAttribute("aria-pressed",isFavorite(track)?"true":"false");
+ like.addEventListener("click",event=>{
+  event.preventDefault();
+  event.stopPropagation();
+  toggleFavorite(track);
+  const active=isFavorite(track);
+  like.textContent=active?"♥":"♡";
+  like.classList.toggle("is-favorite",active);
+  like.setAttribute("aria-pressed",active?"true":"false");
+  like.setAttribute("aria-label",active?"Убрать из избранного":"Добавить в избранное");
+ });
 
  row.append(cover,info,play,like);
  return row;
