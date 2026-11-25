@@ -56,10 +56,10 @@ button{cursor:pointer}
 <section id="russian">
 <h2>Русская музыка</h2>
 <div class="chips">
-<button class="chip" data-query="русский рэп">Русский рэп</button>
-<button class="chip" data-query="русский рок">Русский рок</button>
-<button class="chip" data-query="русская поп музыка">Поп</button>
-<button class="chip" data-query="russian music">Russian music</button>
+<button class="chip" data-queries="рэп|русский рэп|russian rap|хип-хоп">Русский рэп</button>
+<button class="chip" data-queries="русский рок|russian rock|рок|русская рок музыка">Русский рок</button>
+<button class="chip" data-queries="русская поп музыка|русский поп|russian pop">Русский поп</button>
+<button class="chip" data-queries="русская музыка|russian music">Вся русская</button>
 </div>
 <div id="russianList"></div>
 </section>
@@ -210,15 +210,25 @@ async function loadPopular(){
 }
 
 async function searchMusic(query,target="searchList"){
- if(!query.trim()) return;
- setStatus("Ищем музыку...");
+ const queries=Array.isArray(query)?query:[query];
+ const validQueries=queries.map(q=>String(q||"").trim()).filter(Boolean);
+ if(!validQueries.length) return;
+ setStatus("Ищем русские треки...");
  const container=document.getElementById(target);
  container.replaceChildren();
  try{
-  const data=await api(`/tracks/search?query=${encodeURIComponent(query)}&limit=30&app_name=${APP}`);
-  const results=data.map(normalize);
+  const batches=await Promise.all(validQueries.map(async q=>{
+   try{return await api(`/tracks/search?query=${encodeURIComponent(q)}&limit=30&app_name=${APP}`)}catch(e){return []}
+  }));
+  const seen=new Set();
+  const results=batches.flat().map(normalize).filter(track=>{
+   const key=track.id;
+   if(seen.has(key)) return false;
+   seen.add(key);
+   return /[А-Яа-яЁё]/.test(track.title) || /[А-Яа-яЁё]/.test(track.artist);
+  });
   renderList(target,results);
-  setStatus(results.length?"Результаты поиска загружены":"Ничего не найдено");
+  setStatus(results.length?`Найдено русскоязычных треков: ${results.length}`:"В Audius пока не нашлись треки с русскими названиями. Попробуй другой запрос.");
  }catch(error){
   setStatus("Поиск временно недоступен");
  }
@@ -300,9 +310,10 @@ document.getElementById("searchInput").addEventListener("keydown",event=>{
  if(event.key==="Enter") searchMusic(event.target.value);
 });
 
-document.querySelectorAll("[data-query]").forEach(button=>{
+document.querySelectorAll("[data-queries]").forEach(button=>{
  button.addEventListener("click",()=>{
-  searchMusic(button.dataset.query,"russianList");
+  const queries=button.dataset.queries.split("|");
+  searchMusic(queries,"russianList");
  });
 });
 
