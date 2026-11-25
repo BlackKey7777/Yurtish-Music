@@ -186,7 +186,7 @@ async function registerAccount(){
  if(!/^[a-zA-Z0-9_]{3,24}$/.test(username)){authMessage("Логин: 3–24 символа, только латинские буквы, цифры и _.");return;}
  if(password.length<6){authMessage("Пароль должен содержать минимум 6 символов.");return;}
  authMessage("Создаём аккаунт...");
- const {data,error}=await supabase.auth.signUp({email:accountEmail(username),password,options:{data:{username}}});
+ const {data,error}=await Promise.race([supabase.auth.signUp({email:accountEmail(username),password,options:{data:{username}}}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Сервер не ответил за 15 секунд. Проверь интернет или настройки Supabase.")),15000))]);
  if(error){authMessage(error.message);return;}
  if(!data.session){authMessage("Аккаунт создан. Для входа отключи подтверждение email в Supabase: Authentication → Providers → Email → Confirm email OFF, затем войди.");return;}
  currentUser=data.user;updateAccountUI();await loadCloudFavorites();
@@ -198,7 +198,7 @@ async function loginAccount(){
  const password=document.getElementById("passwordInput").value;
  if(!/^[a-zA-Z0-9_]{3,24}$/.test(username)||!password){authMessage("Проверь логин и пароль.");return;}
  authMessage("Входим...");
- const {data,error}=await supabase.auth.signInWithPassword({email:accountEmail(username),password});
+ const {data,error}=await Promise.race([supabase.auth.signInWithPassword({email:accountEmail(username),password}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Сервер не ответил за 15 секунд. Проверь интернет или настройки Supabase.")),15000))]);
  if(error){authMessage("Не удалось войти. Проверь логин и пароль.");return;}
  currentUser=data.user;updateAccountUI();await loadCloudFavorites();
 }
