@@ -607,48 +607,87 @@ loadPopular();
 </script>
 
 <script>
-/* Резервное подключение основных кнопок для Safari */
+/* Независимый поиск и воспроизведение для Safari */
 (function(){
- function run(fn, fallbackMessage){
+ const status=document.getElementById("status");
+ const say=t=>{if(status)status.textContent=t;};
+ const list=document.getElementById("searchList");
+ const russianList=document.getElementById("russianList");
+ const audio=document.getElementById("audio");
+ let activeQueue=[];
+ let activeIndex=-1;
+ async function findTracks(query,target){
+  const box=target==="russianList"?russianList:list;
+  if(!box)return;
+  box.innerHTML='<div class="empty">Ищем музыку...</div>';
+  say("Ищем треки...");
+  const queries=Array.isArray(query)?query:[query];
   try{
-   if(typeof fn!=="function") throw new Error(fallbackMessage);
-   const result=fn();
-   if(result && typeof result.catch==="function") result.catch(e=>{
-    const s=document.getElementById("status"); if(s) s.textContent="Ошибка: "+(e.message||String(e));
+   const batches=await Promise.all(queries.map(async q=>{
+    const url="https://proxy.cors.dev/https://api.deezer.com/search?q="+encodeURIComponent(q)+"&limit=30";
+    const response=await fetch(url,{credentials:"omit"});
+    if(!response.ok)throw new Error("Сервис поиска временно недоступен");
+    const json=await response.json();
+    return (json.data||[]).map(t=>({id:String(t.id),title:t.title||"Без названия",artist:t.artist?.name||"Неизвестный исполнитель",cover:t.album?.cover_medium||"",preview:t.preview||"",source:"deezer"}));
+   }));
+   const seen=new Set();
+   let results=batches.flat().filter(t=>{
+    const key=t.id;
+    if(seen.has(key))return false;
+    seen.add(key);
+    return target!=="russianList"||/[А-Яа-яЁё]/.test(t.title+" "+t.artist);
    });
+   if(!results.length){box.innerHTML='<div class="empty">Ничего не найдено. Попробуй другой запрос.</div>';say("Ничего не найдено");return;}
+   activeQueue=results;
+   box.replaceChildren();
+   results.forEach((track,index)=>{
+    const row=document.createElement("div");row.className="track";
+    const cover=document.createElement("div");cover.className="cover";
+    if(track.cover){cover.style.backgroundImage='url("'+track.cover+'")';cover.style.backgroundSize="cover";}
+    else cover.textContent="♫";
+    const info=document.createElement("div");info.className="info";
+    const title=document.createElement("strong");title.textContent=track.title;
+    const artist=document.createElement("small");artist.textContent=track.artist;
+    info.append(title,artist);
+    const play=document.createElement("button");play.type="button";play.textContent="▶";
+    play.onclick=()=>playTrack(index);
+    row.append(cover,info,play);box.append(row);
+   });
+   say("Найдено треков: "+results.length+". Доступны 30-секундные фрагменты.");
   }catch(e){
-   const s=document.getElementById("status"); if(s) s.textContent="Кнопка нажалась, но функция не запустилась: "+(e.message||String(e));
+   box.innerHTML='<div class="empty">Поиск не загрузился. Попробуй ещё раз.</div>';
+   say("Ошибка поиска: "+(e.message||String(e)));
   }
  }
- const search=document.getElementById("searchBtn");
- if(search) search.onclick=function(){
-  const q=document.getElementById("searchInput");
-  if(typeof window.searchMusic!=="function"){const s=document.getElementById("status");if(s)s.textContent="ОШИБКА: функция поиска не запустилась";return;} run(()=>window.searchMusic(q?q.value:""),"Функция поиска не загрузилась");
- };
- const input=document.getElementById("searchInput");
- if(input) input.onkeydown=function(e){if(e.key==="Enter"){e.preventDefault();search?.click();}};
+ async function playTrack(index){
+  const track=activeQueue[index];
+  if(!track)return;
+  if(!track.preview){say("Для этого трека нет фрагмента Deezer.");return;}
+  activeIndex=index;
+  audio.src=track.preview;
+  document.getElementById("nowTitle").textContent=track.title+" — "+track.artist;
+  try{await audio.play();say("Сейчас играет фрагмент: "+track.title);}
+  catch(e){say("Не удалось включить фрагмент. Нажми ещё раз.");}
+ }
+ const searchBtn=document.getElementById("searchBtn");
+ if(searchBtn)searchBtn.onclick=()=>findTracks(document.getElementById("searchInput")?.value||"","searchList");
+ const searchInput=document.getElementById("searchInput");
+ if(searchInput)searchInput.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();searchBtn?.click();}};
  document.querySelectorAll("[data-queries]").forEach(button=>{
-  button.onclick=function(){
-   const queries=(button.getAttribute("data-queries")||"").split("|");
-   if(typeof window.searchMusic!=="function"){const s=document.getElementById("status");if(s)s.textContent="ОШИБКА: функция жанров не запустилась";return;} run(()=>window.searchMusic(queries,"russianList"),"Функция жанров не загрузилась");
+  button.onclick=()=>{
    document.querySelectorAll("[data-queries]").forEach(b=>b.classList.toggle("active",b===button));
+   findTracks((button.getAttribute("data-queries")||"").split("|"),"russianList");
   };
  });
- const prev=document.getElementById("prevBtn");
- if(prev) prev.onclick=()=>if(typeof window.skipTrack!=="function"){const s=document.getElementById("status");if(s)s.textContent="ОШИБКА: плеер не запустился";return;} run(()=>window.skipTrack(-1),"Плеер не загрузился");
- const next=document.getElementById("nextBtn");
- if(next) next.onclick=()=>if(typeof window.skipTrack!=="function"){const s=document.getElementById("status");if(s)s.textContent="ОШИБКА: плеер не запустился";return;} run(()=>window.skipTrack(1),"Плеер не загрузился");
- const play=document.getElementById("playBtn");
- if(play) play.onclick=function(){
-  const audio=document.getElementById("audio");
-  if(!audio) return;
-  if(audio.paused) run(()=>audio.play(),"Не удалось включить трек");
+ const playBtn=document.getElementById("playBtn");
+ if(playBtn)playBtn.onclick=async()=>{
+  if(audio.paused){try{await audio.play();}catch(e){say("Сначала выбери трек.");}}
   else audio.pause();
  };
- document.querySelectorAll("button").forEach(button=>{
-  button.style.pointerEvents="auto";
-  button.style.touchAction="manipulation";
- });
+ const prev=document.getElementById("prevBtn");
+ const next=document.getElementById("nextBtn");
+ if(prev)prev.onclick=()=>playTrack(Math.max(0,activeIndex-1));
+ if(next)next.onclick=()=>playTrack(Math.min(activeQueue.length-1,activeIndex+1));
 })();
 </script>
 </body>
