@@ -352,7 +352,7 @@ function renderFavorites(){
    return myTracks.find(track=>track.id===item.id);
   }
   return tracks.find(track=>track.id===item.id) || {
-   ...item,source:"audius"
+   ...item,source:item.source || "audius"
   };
  }).filter(Boolean);
  renderList("favoriteList",list);
