@@ -41,7 +41,7 @@ button{cursor:pointer}
 .upload input{display:none}
 .hint{color:#888;font-size:12px;line-height:1.5}
 .chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px}
-.platform-links{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.platform-links a{display:inline-block;background:#24232b;border:1px solid #393641;border-radius:10px;padding:10px 12px;color:#ddd;text-decoration:none;font-size:12px}.vk-profile-box{margin:14px 0;padding:13px;background:#1b1922;border:1px solid #393340;border-radius:12px}.vk-profile-box input{width:100%;margin:8px 0;background:#24232b;border:1px solid #393641;border-radius:10px;padding:12px;color:white;font-size:14px}.vk-profile-box button{background:#9333ea;color:white;border:0;border-radius:10px;padding:11px 14px}.source-note{font-size:11px;color:#999;line-height:1.45;margin:8px 0}
+
 </style>
 </head>
 <body>
@@ -88,12 +88,6 @@ button{cursor:pointer}
 <button class="action" id="searchBtn">Найти</button>
 </div>
 <div id="searchList"></div>
-<div class="vk-profile-box">
- <strong>Музыка из открытого профиля VK</strong>
- <input id="vkProfileUrl" type="url" inputmode="url" placeholder="Вставь ссылку на профиль VK">
- <button type="button" id="vkProfileBtn">Открыть музыку профиля</button>
- <div class="source-note">VK не разрешает этому сайту свободно получать аудиозаписи любого профиля по одной ссылке. Кнопка откроет страницу музыки профиля в VK; закрытые и недоступные записи не появятся в YURTISH MUSIC.</div>
-</div>
 </section>
 
 <section id="mine">
@@ -357,6 +351,14 @@ function createTrackElement(track,queue=[]){
 
 function renderList(containerId,list){
  const container=document.getElementById(containerId);
+ const unique=[],ids=new Set(),names=new Set();
+ const norm=value=>String(value||"").normalize("NFKC").toLocaleLowerCase().replace(/\s+/g," ").trim();
+ (Array.isArray(list)?list:[]).forEach(track=>{
+  const id=String(track.id||""),name=norm(track.title)+"|"+norm(track.artist);
+  if((id&&ids.has(id))||names.has(name))return;
+  if(id)ids.add(id);names.add(name);unique.push(track);
+ });
+ list=unique;
  container.replaceChildren();
  if(!list.length){
   const empty=document.createElement("div");
@@ -372,7 +374,7 @@ async function loadPopular(){
  setStatus("Загружаем популярные треки...");
  try{
   const data=await api(`/tracks/trending?limit=30&app_name=${APP}`);
-  tracks=data.map(normalize);
+  tracks=data.map(normalize).filter(track=>track.id&&track.title);
   renderList("popularList",tracks);
   setStatus("Популярные треки загружены");
  }catch(error){
@@ -388,7 +390,7 @@ async function searchMusic(query,target="searchList"){
  setStatus("Поиск в Audius: "+term);
  try{
   const data=await api("/tracks/search?query="+encodeURIComponent(term)+"&limit=50&app_name="+APP);
-  const results=data.map(normalize);
+  const results=data.map(normalize).filter(track=>track.id&&track.title);
   renderList(target,results);
   setStatus(results.length?"Найдено "+results.length+" треков. Воспроизведение — полная версия, если она доступна в Audius.":"Полные доступные треки не найдены.");
  }catch(error){
@@ -398,35 +400,28 @@ async function searchMusic(query,target="searchList"){
 }
 
 async function playTrack(track,queue=currentQueue){
- currentQueue=queue && queue.length ? queue : [track];
- currentIndex=currentQueue.findIndex(item=>item.id===track.id && item.source===track.source);
+ currentQueue=queue&&queue.length?queue:[track];
+ currentIndex=currentQueue.findIndex(item=>String(item.id)===String(track.id)&&item.source===track.source);
  if(currentIndex<0){currentQueue=[track];currentIndex=0;}
  currentTrack=track;
+ const button=document.getElementById("playBtn");
  document.getElementById("nowTitle").textContent=track.title+" — "+track.artist;
- setStatus("Подключаем трек...");
-
+ button.textContent="▶";progressBar.value="0";progressBar.max="0";timeLabel.textContent="0:00 / 0:00";
+ audio.pause();audio.removeAttribute("src");audio.load();setStatus("Подключаем трек...");
  try{
-  if(track.source==="local"){
-   audio.src=track.url;
-  }else if(track.source==="deezer"){
-   let preview=track.preview;
-   if(!preview){
-    const refreshed=await deezerSearch(track.title+" "+track.artist);
-    const match=refreshed.find(item=>item.title.toLowerCase()===track.title.toLowerCase() && item.artist.toLowerCase()===track.artist.toLowerCase()) || refreshed[0];
-    preview=match?.preview;
-   }
-   if(!preview) throw new Error("Для этого трека нет фрагмента");
-   audio.src=preview;
-  }else{
-   audio.src=`${API}/tracks/${encodeURIComponent(track.id)}/stream?app_name=${APP}`;
+  const sources=track.source==="local"?[track.url]:track.source==="deezer"?[track.preview].filter(Boolean):[
+   "https://api.audius.co/v1/tracks/"+encodeURIComponent(track.id)+"/stream?app_name="+APP,
+   "https://discoveryprovider.audius.co/v1/tracks/"+encodeURIComponent(track.id)+"/stream?app_name="+APP
+  ];
+  if(!sources.length)throw new Error("У трека нет аудиопотока");
+  let lastError=null,started=false;
+  for(const src of sources){
+   try{audio.src=src;audio.load();await audio.play();started=true;break;}
+   catch(error){lastError=error;audio.pause();audio.removeAttribute("src");audio.load();}
   }
-  await audio.play();
-  document.getElementById("playBtn").textContent="Ⅱ";
+  if(!started)throw lastError||new Error("Поток недоступен");
   setStatus("Сейчас играет");
- }catch(error){
-  setStatus("Не удалось включить трек. Возможно, источник недоступен.");
-  document.getElementById("playBtn").textContent="▶";
- }
+ }catch(error){button.textContent="▶";setStatus("Не удалось включить трек: "+(error&&error.message||"источник недоступен"));}
 }
 
 async function skipTrack(direction){
@@ -439,29 +434,19 @@ document.getElementById("prevBtn").addEventListener("click",()=>skipTrack(-1));
 document.getElementById("nextBtn").addEventListener("click",()=>skipTrack(1));
 
 document.getElementById("playBtn").addEventListener("click",async()=>{
- if(!currentTrack){
-  setStatus("Сначала выбери трек");
-  return;
- }
- if(audio.paused){
-  try{
-   await audio.play();
-   document.getElementById("playBtn").textContent="Ⅱ";
-  }catch(error){
-   setStatus("Не удалось продолжить воспроизведение");
-  }
- }else{
-  audio.pause();
-  document.getElementById("playBtn").textContent="▶";
- }
+ if(!currentTrack){setStatus("Сначала выбери трек");return;}
+ if(audio.paused){try{await audio.play();}catch(error){setStatus("Не удалось продолжить: "+(error&&error.message||"поток недоступен"));}}
+ else audio.pause();
 });
 
 audio.addEventListener("ended",()=>{
  if(currentIndex>=0 && currentIndex<currentQueue.length-1){skipTrack(1);}
  else {document.getElementById("playBtn").textContent="▶";setStatus("Плейлист завершён");}
 });
-audio.addEventListener("play",()=>{document.getElementById("playBtn").textContent="Ⅱ";});
-audio.addEventListener("pause",()=>{document.getElementById("playBtn").textContent="▶";});
+audio.addEventListener("play",()=>{document.getElementById("playBtn").textContent="Ⅱ";setStatus("Сейчас играет");});
+audio.addEventListener("playing",()=>{document.getElementById("playBtn").textContent="Ⅱ";setStatus("Сейчас играет");});
+audio.addEventListener("pause",()=>{document.getElementById("playBtn").textContent="▶";if(currentTrack&&audio.currentTime>0&&!audio.ended)setStatus("На паузе");});
+audio.addEventListener("waiting",()=>setStatus("Загрузка аудио..."));
 audio.addEventListener("error",()=>{
  document.getElementById("playBtn").textContent="▶";
  setStatus("Ошибка воспроизведения. Попробуй другой трек.");
@@ -474,14 +459,18 @@ function formatTrackTime(seconds){
 }
 function refreshProgress(){
  const duration=Number.isFinite(audio.duration)?audio.duration:0;
- if(duration>0){progressBar.max=String(duration);progressBar.value=String(Math.min(audio.currentTime,duration));}
- else{progressBar.max="0";progressBar.value="0";}
- timeLabel.textContent=formatTrackTime(audio.currentTime)+" / "+formatTrackTime(duration);
+ const current=Number.isFinite(audio.currentTime)?audio.currentTime:0;
+ if(duration>0){progressBar.max=String(duration);progressBar.value=String(Math.min(current,duration));progressBar.disabled=false;}
+ else{progressBar.max="0";progressBar.value="0";progressBar.disabled=true;}
+ timeLabel.textContent=formatTrackTime(current)+" / "+formatTrackTime(duration);
 }
 audio.addEventListener("loadedmetadata",refreshProgress);
 audio.addEventListener("durationchange",refreshProgress);
 audio.addEventListener("timeupdate",refreshProgress);
+audio.addEventListener("seeking",refreshProgress);
 audio.addEventListener("seeked",refreshProgress);
+audio.addEventListener("emptied",refreshProgress);
+audio.addEventListener("loadeddata",refreshProgress);
 function seekAudio(){
  const target=Number(progressBar.value);
  if(Number.isFinite(audio.duration)&&audio.duration>0&&Number.isFinite(target)){
@@ -655,27 +644,6 @@ loadPopular();
   return /[А-Яа-яЁё]/.test(title+" "+artist);
  }
 
- const vkButton=document.getElementById("vkProfileBtn");
- if(vkButton)vkButton.addEventListener("click",()=>{
-  const value=document.getElementById("vkProfileUrl")?.value.trim()||"";
-  let profile;
-  try{const normalized=value.includes("://")?value:"https://"+value;profile=new URL(normalized);}catch(_){say("Вставь ссылку на профиль VK, например vk.com/id123");return;}
-  if(!/(^|\.)vk\.(com|ru)$/i.test(profile.hostname)){say("Нужна ссылка именно на vk.com или vk.ru.");return;}
-  const path=profile.pathname.replace(/\/$/,"");
-  if(!path||path==="/"||path.toLowerCase()==="/audio"){say("Вставь ссылку на конкретный профиль VK.");return;}
-  const numeric=path.match(/^\/id(\d+)$/i);
-  const target=numeric?"https://vk.com/audios"+numeric[1]:"https://vk.com"+path+"?section=audio";
-  let link=document.getElementById("vkProfileOpenLink");
-  if(!link){
-   link=document.createElement("a");link.id="vkProfileOpenLink";link.className="action";
-   link.style.display="inline-block";link.style.marginTop="10px";link.style.textDecoration="none";
-   link.target="_blank";link.rel="noopener noreferrer";link.textContent="Открыть аудиозаписи VK";
-   vkButton.insertAdjacentElement("afterend",link);
-  }
-  link.href=target;
-  link.textContent="Открыть музыку профиля в VK";
-  say("Ссылка подготовлена. Нажми «Открыть музыку профиля в VK» ниже. Если владелец скрыл аудио, VK не покажет его.");
- });
  function normalizeGenreTrack(track){
   return {id:String(track.id),title:track.title||"Без названия",artist:track.user?.name||"Неизвестный исполнитель",artwork:track.artwork?.["150x150"]||"",source:"audius",raw:track};
  }
@@ -737,7 +705,7 @@ loadPopular();
      const key=String(track.id);
      if(!key||seen.has(key)||!canStream(track))continue;
      const normalized=normalizeGenreTrack(track);
-     const nameKey=(normalized.title+"|"+normalized.artist).toLocaleLowerCase().replace(/\\s+/g," ").trim();
+     const nameKey=(normalized.title+"|"+normalized.artist).toLocaleLowerCase().replace(/\s+/g," ").trim();
      if(seenNames.has(nameKey))continue;
      seen.add(key);seenNames.add(nameKey);
      filtered.push(normalized);
@@ -755,7 +723,7 @@ loadPopular();
   const box=document.getElementById("searchList");
   if(!query){say("Введи название трека или исполнителя.");return;}
   box.textContent="Ищем треки в каталоге Audius...";
-  say("Ищем треки в Audius и показываем поиск на других площадках: "+query);
+  say("Ищем треки в каталоге Audius: "+query);
   try{
    const data=await fetchTracks("/tracks/search?query="+encodeURIComponent(query)+"&limit=50&app_name="+app);
    const filtered=[],seenIds=new Set(),seenNames=new Set();
@@ -765,7 +733,7 @@ loadPopular();
     if(!canStream(track))continue;
     const normalized=normalizeGenreTrack(track);
     const id=String(normalized.id);
-    const nameKey=(normalized.title+"|"+normalized.artist).toLocaleLowerCase().replace(/\\s+/g," ").trim();
+    const nameKey=(normalized.title+"|"+normalized.artist).toLocaleLowerCase().replace(/\s+/g," ").trim();
     if(seenIds.has(id)||seenNames.has(nameKey))continue;
     seenIds.add(id);seenNames.add(nameKey);filtered.push(normalized);
    }
