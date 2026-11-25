@@ -116,6 +116,16 @@ button{cursor:pointer}
 <audio id="audio"></audio>
 </div>
 
+<script>
+window.addEventListener("error", function(event) {
+ const el = document.getElementById("authMessage");
+ if (el) el.textContent = "Ошибка JavaScript: " + (event.message || "неизвестная ошибка") + (event.filename ? " (" + event.filename.split("/").pop() + ":" + event.lineno + ")" : "");
+});
+window.addEventListener("unhandledrejection", function(event) {
+ const el = document.getElementById("authMessage");
+ if (el) el.textContent = "Ошибка запроса: " + (event.reason && event.reason.message ? event.reason.message : String(event.reason));
+});
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const SUPABASE_URL = "https://xgdebznuvmrfigoczuoi.supabase.co";
