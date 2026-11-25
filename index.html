@@ -524,6 +524,10 @@ function renderFavorites(){
 
 
 renderFavorites();
+window.searchMusic = searchMusic;
+window.skipTrack = skipTrack;
+window.playTrack = playTrack;
+window.toggleFavorite = toggleFavorite;
 initAuth();
 loadPopular();
 </script>
@@ -619,21 +623,21 @@ loadPopular();
  const search=document.getElementById("searchBtn");
  if(search) search.onclick=function(){
   const q=document.getElementById("searchInput");
-  run(()=>window.searchMusic && window.searchMusic(q?q.value:""),"Функция поиска не загрузилась");
+  if(typeof window.searchMusic!=="function"){const s=document.getElementById("status");if(s)s.textContent="ОШИБКА: функция поиска не запустилась";return;} run(()=>window.searchMusic(q?q.value:""),"Функция поиска не загрузилась");
  };
  const input=document.getElementById("searchInput");
  if(input) input.onkeydown=function(e){if(e.key==="Enter"){e.preventDefault();search?.click();}};
  document.querySelectorAll("[data-queries]").forEach(button=>{
   button.onclick=function(){
    const queries=(button.getAttribute("data-queries")||"").split("|");
-   run(()=>window.searchMusic && window.searchMusic(queries,"russianList"),"Функция жанров не загрузилась");
+   if(typeof window.searchMusic!=="function"){const s=document.getElementById("status");if(s)s.textContent="ОШИБКА: функция жанров не запустилась";return;} run(()=>window.searchMusic(queries,"russianList"),"Функция жанров не загрузилась");
    document.querySelectorAll("[data-queries]").forEach(b=>b.classList.toggle("active",b===button));
   };
  });
  const prev=document.getElementById("prevBtn");
- if(prev) prev.onclick=()=>run(()=>window.skipTrack && window.skipTrack(-1),"Плеер не загрузился");
+ if(prev) prev.onclick=()=>if(typeof window.skipTrack!=="function"){const s=document.getElementById("status");if(s)s.textContent="ОШИБКА: плеер не запустился";return;} run(()=>window.skipTrack(-1),"Плеер не загрузился");
  const next=document.getElementById("nextBtn");
- if(next) next.onclick=()=>run(()=>window.skipTrack && window.skipTrack(1),"Плеер не загрузился");
+ if(next) next.onclick=()=>if(typeof window.skipTrack!=="function"){const s=document.getElementById("status");if(s)s.textContent="ОШИБКА: плеер не запустился";return;} run(()=>window.skipTrack(1),"Плеер не загрузился");
  const play=document.getElementById("playBtn");
  if(play) play.onclick=function(){
   const audio=document.getElementById("audio");
