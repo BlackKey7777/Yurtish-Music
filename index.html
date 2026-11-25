@@ -209,31 +209,33 @@ async function loadPopular(){
  }
 }
 
+async function deezerSearch(query){
+ const url="https://proxy.cors.dev/https://api.deezer.com/search?q="+encodeURIComponent(query)+"&limit=30";
+ const response=await fetch(url,{credentials:"omit"});
+ if(!response.ok) throw new Error("Deezer временно недоступен");
+ const json=await response.json();
+ if(json.error) throw new Error(json.error.message || "Ошибка Deezer");
+ return (json.data || []).map(track=>({id:String(track.id),title:track.title || "Без названия",artist:track.artist?.name || "Неизвестный исполнитель",artwork:track.album?.cover_medium || track.album?.cover || "",preview:track.preview || "",source:"deezer",deezerUrl:track.link || ""}));
+}
+
 async function searchMusic(query,target="searchList"){
  const queries=Array.isArray(query)?query:[query];
  const validQueries=queries.map(q=>String(q||"").trim()).filter(Boolean);
  if(!validQueries.length) return;
- setStatus("Ищем русские треки...");
+ setStatus(target==="russianList"?"Ищем русскую музыку в Deezer...":"Ищем музыку...");
  const container=document.getElementById(target);
  container.replaceChildren();
  try{
   const batches=await Promise.all(validQueries.map(async q=>{
-   try{return await api(`/tracks/search?query=${encodeURIComponent(q)}&limit=30&app_name=${APP}`)}catch(e){return []}
+   const results=await Promise.allSettled([deezerSearch(q),target==="russianList"?Promise.resolve([]):api("/tracks/search?query="+encodeURIComponent(q)+"&limit=20&app_name="+APP).then(data=>data.map(normalize))]);
+   return results.flatMap(result=>result.status==="fulfilled"?result.value:[]);
   }));
   const seen=new Set();
-  const results=batches.flat().map(normalize).filter(track=>{
-   const key=track.id;
-   if(seen.has(key)) return false;
-   seen.add(key);
-   return /[А-Яа-яЁё]/.test(track.title) || /[А-Яа-яЁё]/.test(track.artist);
-  });
+  const results=batches.flat().filter(track=>{const key=track.source+":"+track.id;if(seen.has(key))return false;seen.add(key);return target!=="russianList"||track.source==="deezer";});
   renderList(target,results);
-  setStatus(results.length?`Найдено русскоязычных треков: ${results.length}`:"В Audius пока не нашлись треки с русскими названиями. Попробуй другой запрос.");
- }catch(error){
-  setStatus("Поиск временно недоступен");
- }
+  setStatus(results.length?"Найдено треков: "+results.length+". Deezer даёт 30-секундные фрагменты.":"Ничего не найдено. Попробуй другое название или исполнителя.");
+ }catch(error){renderList(target,[]);setStatus("Поиск временно недоступен. Попробуй ещё раз.");}
 }
-
 async function playTrack(track,queue=currentQueue){
  currentQueue=queue && queue.length ? queue : [track];
  currentIndex=currentQueue.findIndex(item=>item.id===track.id && item.source===track.source);
@@ -245,6 +247,15 @@ async function playTrack(track,queue=currentQueue){
  try{
   if(track.source==="local"){
    audio.src=track.url;
+  }else if(track.source==="deezer"){
+   let preview=track.preview;
+   if(!preview){
+    const refreshed=await deezerSearch(track.title+" "+track.artist);
+    const match=refreshed.find(item=>item.title.toLowerCase()===track.title.toLowerCase() && item.artist.toLowerCase()===track.artist.toLowerCase()) || refreshed[0];
+    preview=match?.preview;
+   }
+   if(!preview) throw new Error("Для этого трека нет фрагмента");
+   audio.src=preview;
   }else{
    audio.src=`${API}/tracks/${encodeURIComponent(track.id)}/stream?app_name=${APP}`;
   }
