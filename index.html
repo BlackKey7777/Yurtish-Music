@@ -690,6 +690,91 @@ loadPopular();
  if(next)next.onclick=()=>playTrack(Math.min(activeQueue.length-1,activeIndex+1));
 })();
 </script>
+
+<script>
+/* YURTISH MUSIC: единый обработчик поиска и жанров */
+(function(){
+  if(window.__yurtishUnifiedClicks) return;
+  window.__yurtishUnifiedClicks = true;
+  const status = document.getElementById("status");
+  const say = message => { if(status) status.textContent = message; };
+  const audio = document.getElementById("audio");
+  let queue = [];
+  let active = -1;
+
+  async function search(query, targetId){
+    const box = document.getElementById(targetId);
+    if(!box) return;
+    box.textContent = "Ищем музыку...";
+    say("Поиск запущен: " + (Array.isArray(query) ? query[0] : query));
+    try {
+      const terms = Array.isArray(query) ? query : [query];
+      const responses = await Promise.all(terms.map(async term => {
+        const url = "https://proxy.cors.dev/https://api.deezer.com/search?q=" + encodeURIComponent(term) + "&limit=30";
+        const response = await fetch(url, {credentials:"omit"});
+        if(!response.ok) throw new Error("Музыкальный сервис ответил ошибкой " + response.status);
+        const json = await response.json();
+        return (json.data || []).map(t => ({
+          id:String(t.id), title:t.title || "Без названия",
+          artist:t.artist && t.artist.name || "Неизвестный исполнитель",
+          cover:t.album && t.album.cover_medium || "", preview:t.preview || ""
+        }));
+      }));
+      const seen = new Set();
+      queue = responses.flat().filter(t => {
+        if(seen.has(t.id)) return false;
+        seen.add(t.id);
+        return targetId !== "russianList" || /[А-Яа-яЁё]/.test(t.title + " " + t.artist);
+      });
+      active = -1;
+      box.replaceChildren();
+      if(!queue.length){ box.textContent="Ничего не найдено. Попробуй другой запрос."; say("Поиск завершён: совпадений нет."); return; }
+      queue.forEach((track,index) => {
+        const row=document.createElement("div"); row.className="track";
+        const cover=document.createElement("div"); cover.className="cover";
+        if(track.cover){cover.style.backgroundImage='url("' + track.cover + '")';cover.style.backgroundSize="cover";}
+        else cover.textContent="♫";
+        const info=document.createElement("div");info.className="info";
+        const title=document.createElement("strong");title.textContent=track.title;
+        const artist=document.createElement("small");artist.textContent=track.artist;
+        info.append(title,artist);
+        const play=document.createElement("button");play.type="button";play.textContent="▶";
+        play.addEventListener("click", async () => {
+          if(!track.preview){say("Для этого трека нет 30-секундного фрагмента.");return;}
+          active=index; audio.src=track.preview;
+          document.getElementById("nowTitle").textContent=track.title+" — "+track.artist;
+          try{await audio.play();say("Сейчас играет фрагмент: "+track.title);}
+          catch(e){say("Браузер не разрешил воспроизведение. Нажми ▶ ещё раз.");}
+        });
+        row.append(cover,info,play);box.append(row);
+      });
+      say("Найдено треков: "+queue.length+".");
+    } catch(error) {
+      box.textContent="Не удалось загрузить результаты. Проверь интернет и попробуй снова.";
+      say("Ошибка поиска: "+(error && error.message || String(error)));
+    }
+  }
+
+  document.addEventListener("click", event => {
+    const button = event.target.closest("button");
+    if(!button) return;
+    if(button.id === "searchBtn"){
+      event.preventDefault(); event.stopImmediatePropagation();
+      search(document.getElementById("searchInput")?.value.trim() || "", "searchList");
+    } else if(button.hasAttribute("data-queries")){
+      event.preventDefault(); event.stopImmediatePropagation();
+      document.querySelectorAll("[data-queries]").forEach(b=>b.classList.toggle("active",b===button));
+      search((button.getAttribute("data-queries")||"").split("|"), "russianList");
+    }
+  }, true);
+
+  const input=document.getElementById("searchInput");
+  if(input) input.addEventListener("keydown",event=>{
+    if(event.key==="Enter"){event.preventDefault();document.getElementById("searchBtn")?.click();}
+  });
+})();
+</script>
+
 </body>
 </html>
 
