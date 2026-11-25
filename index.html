@@ -231,7 +231,7 @@ async function searchMusic(query,target="searchList"){
    return results.flatMap(result=>result.status==="fulfilled"?result.value:[]);
   }));
   const seen=new Set();
-  const results=batches.flat().filter(track=>{const key=track.source+":"+track.id;if(seen.has(key))return false;seen.add(key);return target!=="russianList"||track.source==="deezer";});
+  const results=batches.flat().filter(track=>{const key=track.source+":"+track.id;if(seen.has(key))return false;seen.add(key);return target!=="russianList"||(track.source==="deezer"&&(/[А-Яа-яЁё]/.test(track.title)||/[А-Яа-яЁё]/.test(track.artist)));});
   renderList(target,results);
   setStatus(results.length?"Найдено треков: "+results.length+". Deezer даёт 30-секундные фрагменты.":"Ничего не найдено. Попробуй другое название или исполнителя.");
  }catch(error){renderList(target,[]);setStatus("Поиск временно недоступен. Попробуй ещё раз.");}
