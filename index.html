@@ -274,7 +274,7 @@ function normalize(track){
   raw:track
  };
 }
-
+window.normalizeTrackForUI=normalize;
 function isFavorite(track){
  return favorites.some(item=>item.id===track.id && item.source===track.source);
 }
@@ -359,7 +359,7 @@ function renderList(containerId,list){
  }
  list.forEach(track=>container.append(createTrackElement(track,list)));
 }
-
+window.renderAudiusList=renderList;
 async function loadPopular(){
  setStatus("Загружаем популярные треки...");
  try{
@@ -668,8 +668,8 @@ loadPopular();
    }else{
     data=await fetchTracks("/tracks/trending?limit=100&time=week&app_name="+app);
    }
-   const filtered=data.filter(t=>!genre||isGenre(t,genre)).filter(canStream).map(normalize);
-   renderList("russianList",filtered);
+   const filtered=data.filter(t=>!genre||isGenre(t,genre)).filter(canStream).map(window.normalizeTrackForUI);
+   window.renderAudiusList("russianList",filtered);
    say(filtered.length?"Найдено "+filtered.length+" полных треков жанра "+label+".":"В подборке Audius пока нет доступных полных треков этого жанра.");
   }catch(error){
    box.textContent="Ошибка загрузки: "+error.message;
@@ -684,8 +684,8 @@ loadPopular();
   say("Ищем в Audius: "+query);
   try{
    const data=await fetchTracks("/tracks/search?query="+encodeURIComponent(query)+"&limit=50&app_name="+app);
-   const filtered=data.filter(canStream).map(normalize);
-   renderList("searchList",filtered);
+   const filtered=data.filter(canStream).map(window.normalizeTrackForUI);
+   window.renderAudiusList("searchList",filtered);
    say(filtered.length?"Найдено "+filtered.length+" полных доступных треков.":"Полные треки по запросу не найдены.");
   }catch(error){
    box.textContent="Поиск временно недоступен.";
