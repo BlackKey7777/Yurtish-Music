@@ -72,10 +72,10 @@ button{cursor:pointer}
 <section id="russian">
 <h2>Русская музыка</h2>
 <div class="chips">
-<button class="chip" data-queries="рэп|русский рэп|russian rap|хип-хоп">Русский рэп</button>
-<button class="chip" data-queries="русский рок|russian rock|рок|русская рок музыка">Русский рок</button>
-<button class="chip" data-queries="русская поп музыка|русский поп|russian pop">Русский поп</button>
-<button class="chip" data-queries="русская музыка|russian music">Вся русская</button>
+<button class="chip" data-genre="Hip-Hop/Rap">Русский рэп</button>
+<button class="chip" data-genre="Rock">Русский рок</button>
+<button class="chip" data-genre="Pop">Русский поп</button>
+<button class="chip" data-genre="">Вся русская</button>
 </div>
 <div id="russianList"></div>
 </section>
@@ -708,102 +708,86 @@ loadPopular();
 </script>
 
 <script>
-/* YURTISH MUSIC: единый обработчик поиска и жанров */
+/* YURTISH MUSIC: поиск и жанровые подборки через Audius — полные streamable-треки */
 (function(){
-  if(window.__yurtishUnifiedClicks) return;
-  window.__yurtishUnifiedClicks = true;
-  const status = document.getElementById("status");
-  const say = message => { if(status) status.textContent = message; };
-  const audio = document.getElementById("audio");
-  let queue = [];
-  let active = -1;
+ if(window.__yurtishAudiusOnly) return;
+ window.__yurtishAudiusOnly=true;
+ const status=document.getElementById("status");
+ const say=message=>{if(status)status.textContent=message;};
+ const API_BASE="https://discoveryprovider.audius.co/v1";
+ const APP_NAME="YurtishMusic";
 
-  async function search(query, targetId){
-    const box = document.getElementById(targetId);
-    if(!box) return;
-    box.textContent = "Ищем музыку...";
-    say("Поиск запущен: " + (Array.isArray(query) ? query[0] : query));
-    try {
-      const terms = Array.isArray(query) ? query : [query];
-      const responses = await Promise.all(terms.map(async term => {
-        const url = "https://proxy.cors.dev/https://api.deezer.com/search?q=" + encodeURIComponent(term) + "&limit=30";
-        const response = await fetch(url, {credentials:"omit"});
-        if(!response.ok) throw new Error("Музыкальный сервис ответил ошибкой " + response.status);
-        const json = await response.json();
-        return (json.data || []).map(t => ({
-          id:String(t.id), title:t.title || "Без названия",
-          artist:t.artist && t.artist.name || "Неизвестный исполнитель",
-          cover:t.album && t.album.cover_medium || "", preview:t.preview || "", source:"deezer"
-        }));
-      }));
-      const seen = new Set();
-      queue = responses.flat().filter(t => {
-        if(seen.has(t.id)) return false;
-        seen.add(t.id);
-        return targetId !== "russianList" || /[А-Яа-яЁё]/.test(t.title + " " + t.artist);
-      });
-      active = -1;
-      box.replaceChildren();
-      if(!queue.length){ box.textContent="Ничего не найдено. Попробуй другой запрос."; say("Поиск завершён: совпадений нет."); return; }
-      queue.forEach((track,index) => {
-        const row=document.createElement("div"); row.className="track";
-        const cover=document.createElement("div"); cover.className="cover";
-        if(track.cover){cover.style.backgroundImage='url("' + track.cover + '")';cover.style.backgroundSize="cover";}
-        else cover.textContent="♫";
-        const info=document.createElement("div");info.className="info";
-        const title=document.createElement("strong");title.textContent=track.title;
-        const artist=document.createElement("small");artist.textContent=track.artist;
-        info.append(title,artist);
-        const play=document.createElement("button");play.type="button";play.textContent="▶";
-        play.addEventListener("click", async () => {
-          if(!track.preview){say("Для этого трека нет 30-секундного фрагмента.");return;}
-          active=index; audio.src=track.preview;
-          document.getElementById("nowTitle").textContent=track.title+" — "+track.artist;
-          try{await audio.play();say("Сейчас играет фрагмент: "+track.title);}
-          catch(e){say("Браузер не разрешил воспроизведение. Нажми ▶ ещё раз.");}
-        });
-        const like=document.createElement("button");
-        like.type="button";like.className="favoriteBtn";
-        const saved=JSON.parse(localStorage.getItem("yurtish_favorites")||"[]");
-        const liked=saved.some(item=>String(item.id)===track.id&&item.source==="deezer");
-        if(liked)like.classList.add("is-favorite");
-        like.textContent=liked?"♥":"♡";
-        like.setAttribute("aria-label",liked?"Убрать из избранного":"Добавить в избранное");
-        like.addEventListener("click",event=>{
-          event.preventDefault();event.stopPropagation();
-          if(typeof window.toggleFavorite!=="function"){say("Избранное пока недоступно. Обнови страницу.");return;}
-          const wasLiked=like.classList.contains("is-favorite");
-          window.toggleFavorite(track);
-          like.classList.toggle("is-favorite",!wasLiked);
-          like.textContent=!wasLiked?"♥":"♡";
-          like.setAttribute("aria-label",!wasLiked?"Убрать из избранного":"Добавить в избранное");
-        });
-        row.append(cover,info,play,like);box.append(row);
-      });
-      say("Найдено треков: "+queue.length+".");
-    } catch(error) {
-      box.textContent="Не удалось загрузить результаты. Проверь интернет и попробуй снова.";
-      say("Ошибка поиска: "+(error && error.message || String(error)));
-    }
+ async function getTracks(path){
+  const response=await fetch(API_BASE+path);
+  if(!response.ok)throw new Error("Audius ответил: "+response.status);
+  const json=await response.json();
+  return Array.isArray(json.data)?json.data:[];
+ }
+ function playable(track){
+  return track && track.is_streamable!==false && track.isStreamable!==false &&
+   String(track.is_streamable).toLowerCase()!=="false" &&
+   String(track.isStreamable).toLowerCase()!=="false";
+ }
+ function russian(track){
+  const tags=Array.isArray(track.tags)?track.tags.join(" "):(track.tags||"");
+  return /[А-Яа-яЁё]/.test((track.title||"")+" "+(track.user?.name||"")+" "+tags);
+ }
+ async function loadGenre(button){
+  const box=document.getElementById("russianList");
+  const genre=button.getAttribute("data-genre")||"";
+  const label=button.textContent.trim();
+  box.replaceChildren();
+  box.textContent="Подбираем треки по жанру "+label+"...";
+  say("Загружаем полные треки жанра: "+label);
+  try{
+   let path="/tracks/trending?limit=100&app_name="+APP_NAME;
+   if(genre)path+="&genre="+encodeURIComponent(genre);
+   let data=await getTracks(path);
+   let list=data.filter(playable).filter(russian).map(normalize);
+   if(!list.length){
+    box.textContent="Пока не нашлось русскоязычных полноформатных треков в этой подборке. Попробуй позже.";
+    say("В жанре "+label+" пока нет подходящих доступных полных треков.");
+    return;
+   }
+   renderList("russianList",list);
+   say("Найдено "+list.length+" полных треков жанра "+label+".");
+  }catch(error){
+   box.textContent="Не удалось загрузить жанровую подборку. Попробуй ещё раз.";
+   say("Ошибка Audius: "+(error.message||String(error)));
   }
-
-  document.addEventListener("click", event => {
-    const button = event.target.closest("button");
-    if(!button) return;
-    if(button.id === "searchBtn"){
-      event.preventDefault(); event.stopImmediatePropagation();
-      search(document.getElementById("searchInput")?.value.trim() || "", "searchList");
-    } else if(button.hasAttribute("data-queries")){
-      event.preventDefault(); event.stopImmediatePropagation();
-      document.querySelectorAll("[data-queries]").forEach(b=>b.classList.toggle("active",b===button));
-      search((button.getAttribute("data-queries")||"").split("|"), "russianList");
-    }
-  }, true);
-
-  const input=document.getElementById("searchInput");
-  if(input) input.addEventListener("keydown",event=>{
-    if(event.key==="Enter"){event.preventDefault();document.getElementById("searchBtn")?.click();}
-  });
+ }
+ async function searchAudius(query){
+  const box=document.getElementById("searchList");
+  const term=String(query||"").trim();
+  if(!term){say("Введи название трека или исполнителя.");return;}
+  box.textContent="Ищем треки...";
+  say("Ищем полные треки в Audius: "+term);
+  try{
+   const data=await getTracks("/tracks/search?query="+encodeURIComponent(term)+"&limit=50&app_name="+APP_NAME);
+   const list=data.filter(playable).map(normalize);
+   renderList("searchList",list);
+   say(list.length?"Найдено "+list.length+" доступных полных треков.":"Полных доступных треков по этому запросу не найдено.");
+  }catch(error){
+   box.textContent="Поиск временно недоступен. Попробуй ещё раз.";
+   say("Ошибка поиска Audius: "+(error.message||String(error)));
+  }
+ }
+ document.addEventListener("click",event=>{
+  const button=event.target.closest("button");
+  if(!button)return;
+  if(button.id==="searchBtn"){
+   event.preventDefault();event.stopImmediatePropagation();
+   searchAudius(document.getElementById("searchInput")?.value||"");
+  }else if(button.hasAttribute("data-genre")){
+   event.preventDefault();event.stopImmediatePropagation();
+   document.querySelectorAll("[data-genre]").forEach(item=>item.classList.toggle("active",item===button));
+   loadGenre(button);
+  }
+ },true);
+ const input=document.getElementById("searchInput");
+ if(input)input.addEventListener("keydown",event=>{
+  if(event.key==="Enter"){event.preventDefault();document.getElementById("searchBtn")?.click();}
+ });
 })();
 </script>
 
