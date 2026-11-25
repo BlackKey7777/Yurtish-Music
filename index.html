@@ -55,11 +55,11 @@ button{cursor:pointer}
   <input id="usernameInput" autocomplete="username" maxlength="24" placeholder="Логин" style="width:100%;background:#24232b;border:1px solid #393641;border-radius:10px;padding:12px;color:white;margin-bottom:8px">
   <input id="passwordInput" type="password" autocomplete="current-password" minlength="6" placeholder="Пароль (минимум 6 символов)" style="width:100%;background:#24232b;border:1px solid #393641;border-radius:10px;padding:12px;color:white;margin-bottom:8px">
   <div style="display:flex;gap:8px">
-   <button class="action" id="loginBtn" style="flex:1">Войти</button>
-   <button class="action" id="registerBtn" style="flex:1;background:#302c39">Регистрация</button>
+   <button type="button" class="action" id="loginBtn" style="flex:1">Войти</button>
+   <button type="button" class="action" id="registerBtn" style="flex:1;background:#302c39">Регистрация</button>
   </div>
  </div>
- <button id="logoutBtn" class="action" style="display:none;background:#302c39;width:100%">Выйти из аккаунта</button>
+ <button type="button" id="logoutBtn" class="action" style="display:none;background:#302c39;width:100%">Выйти из аккаунта</button>
  <div id="authMessage" style="font-size:12px;color:#aaa;margin-top:8px"></div>
 </section>
 
@@ -205,9 +205,25 @@ async function initAuth(){
  if(currentUser) await loadCloudFavorites();
 }
 
-document.getElementById("registerBtn").addEventListener("click",registerAccount);
-document.getElementById("loginBtn").addEventListener("click",loginAccount);
-document.getElementById("logoutBtn").addEventListener("click",logoutAccount);
+document.getElementById("registerBtn").addEventListener("click",async event=>{
+ event.preventDefault();
+ authMessage("Нажата регистрация. Проверяем данные...");
+ try{await registerAccount();}catch(error){authMessage("Ошибка регистрации: "+(error?.message || "Неизвестная ошибка"));}
+});
+document.getElementById("loginBtn").addEventListener("click",async event=>{
+ event.preventDefault();
+ authMessage("Нажат вход. Проверяем данные...");
+ try{await loginAccount();}catch(error){authMessage("Ошибка входа: "+(error?.message || "Неизвестная ошибка"));}
+});
+document.getElementById("logoutBtn").addEventListener("click",async event=>{
+ event.preventDefault();
+ try{await logoutAccount();}catch(error){authMessage("Ошибка выхода: "+(error?.message || "Неизвестная ошибка"));}
+});
+window.addEventListener("error",event=>{
+ const message=event.message || "Ошибка JavaScript";
+ const target=document.getElementById("authMessage");
+ if(target) target.textContent="Ошибка приложения: "+message;
+});
 
 async function api(path){
  const response = await fetch(API + path);
