@@ -120,7 +120,14 @@ button{cursor:pointer}
 <script>
 const SUPABASE_URL = "https://xgdebznuvmrfigoczuoi.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnZGViem51dm1yZmlnb2N6dW9pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU2NDE5MTMsImV4cCI6MjExMTIxNzkxM30.RkAQFxSwVvtnp3nBTCfRpxRvScH9f2rrhXfmlWLj4v0";
-const supabase = window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+let supabase = null;
+try {
+ if (window.supabase && typeof window.supabase.createClient === "function") {
+  supabase = window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+ }
+} catch (error) {
+ console.warn("Supabase недоступен:", error);
+}
 const API = "https://discoveryprovider.audius.co/v1";
 const APP = "YurtishMusic";
 const audio = document.getElementById("audio");
@@ -158,6 +165,7 @@ function updateAccountUI(){
 
 async function loadCloudFavorites(){
  if(!currentUser) return;
+ if(!supabase){authMessage("Сервис аккаунтов временно недоступен. Музыкой можно пользоваться без входа.");return;}
  favoritesSyncing=true;
  try{
   const {data,error}=await supabase.from("favorites").select("track_id,title,artist,source").eq("user_id",currentUser.id);
@@ -172,6 +180,7 @@ async function loadCloudFavorites(){
 }
 
 async function registerAccount(){
+ if(!supabase){authMessage("Не загрузился сервис аккаунтов. Обнови страницу позже.");return;}
  const username=document.getElementById("usernameInput").value.trim();
  const password=document.getElementById("passwordInput").value;
  if(!/^[a-zA-Z0-9_]{3,24}$/.test(username)){authMessage("Логин: 3–24 символа, только латинские буквы, цифры и _.");return;}
@@ -184,6 +193,7 @@ async function registerAccount(){
 }
 
 async function loginAccount(){
+ if(!supabase){authMessage("Не загрузился сервис аккаунтов. Обнови страницу позже.");return;}
  const username=document.getElementById("usernameInput").value.trim();
  const password=document.getElementById("passwordInput").value;
  if(!/^[a-zA-Z0-9_]{3,24}$/.test(username)||!password){authMessage("Проверь логин и пароль.");return;}
@@ -194,12 +204,14 @@ async function loginAccount(){
 }
 
 async function logoutAccount(){
+ if(!supabase){authMessage("Сервис аккаунтов временно недоступен.");return;}
  const {error}=await supabase.auth.signOut();
  if(error){authMessage(error.message);return;}
  currentUser=null;updateAccountUI();favorites=[];saveFavorites();renderFavorites();authMessage("Ты вышел из аккаунта.");
 }
 
 async function initAuth(){
+ if(!supabase){updateAccountUI();authMessage("Аккаунты временно недоступны. Музыка работает без регистрации.");return;}
  const {data}=await supabase.auth.getSession();
  currentUser=data.session?.user || null;updateAccountUI();
  if(currentUser) await loadCloudFavorites();
