@@ -49,6 +49,20 @@ button{cursor:pointer}
 <div class="subtitle">ТВОЯ МУЗЫКА. ТВОИ ПРАВИЛА.</div>
 </header>
 
+<section id="account" style="margin:0 16px 14px;padding:14px;background:#1b1922;border:1px solid #393340;border-radius:14px">
+ <div id="accountStatus" style="font-size:13px;color:#bbb;margin-bottom:10px">Вход не выполнен</div>
+ <div id="authFields">
+  <input id="usernameInput" autocomplete="username" maxlength="24" placeholder="Логин" style="width:100%;background:#24232b;border:1px solid #393641;border-radius:10px;padding:12px;color:white;margin-bottom:8px">
+  <input id="passwordInput" type="password" autocomplete="current-password" minlength="6" placeholder="Пароль (минимум 6 символов)" style="width:100%;background:#24232b;border:1px solid #393641;border-radius:10px;padding:12px;color:white;margin-bottom:8px">
+  <div style="display:flex;gap:8px">
+   <button class="action" id="loginBtn" style="flex:1">Войти</button>
+   <button class="action" id="registerBtn" style="flex:1;background:#302c39">Регистрация</button>
+  </div>
+ </div>
+ <button id="logoutBtn" class="action" style="display:none;background:#302c39;width:100%">Выйти из аккаунта</button>
+ <div id="authMessage" style="font-size:12px;color:#aaa;margin-top:8px"></div>
+</section>
+
 <main>
 <section id="popular">
 <h2>Популярное</h2>
@@ -102,7 +116,11 @@ button{cursor:pointer}
 <audio id="audio"></audio>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+const SUPABASE_URL = "https://xgdebznuvmrfigoczuoi.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnZGViem51dm1yZmlnb2N6dW9pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU2NDE5MTMsImV4cCI6MjExMTIxNzkxM30.RkAQFxSwVvtnp3nBTCfRpxRvScH9f2rrhXfmlWLj4v0";
+const supabase = window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const API = "https://discoveryprovider.audius.co/v1";
 const APP = "YurtishMusic";
 const audio = document.getElementById("audio");
@@ -113,6 +131,8 @@ let currentTrack = null;
 let currentQueue = [];
 let currentIndex = -1;
 let favorites = JSON.parse(localStorage.getItem("yurtish_favorites") || "[]");
+let currentUser = null;
+let favoritesSyncing = false;
 
 function setStatus(message){
  document.getElementById("status").textContent = message;
@@ -121,6 +141,73 @@ function setStatus(message){
 function saveFavorites(){
  localStorage.setItem("yurtish_favorites", JSON.stringify(favorites));
 }
+
+function accountEmail(username){
+ return username.trim().toLowerCase()+"@accounts.yurtishmusic.com";
+}
+
+function authMessage(message){
+ document.getElementById("authMessage").textContent=message;
+}
+
+function updateAccountUI(){
+ document.getElementById("accountStatus").textContent=currentUser ? "Вы вошли как "+(currentUser.user_metadata?.username || currentUser.email.split("@")[0]) : "Вход не выполнен";
+ document.getElementById("authFields").style.display=currentUser?"none":"block";
+ document.getElementById("logoutBtn").style.display=currentUser?"block":"none";
+}
+
+async function loadCloudFavorites(){
+ if(!currentUser) return;
+ favoritesSyncing=true;
+ try{
+  const {data,error}=await supabase.from("favorites").select("track_id,title,artist,source").eq("user_id",currentUser.id);
+  if(error) throw error;
+  favorites=data.map(item=>({id:item.track_id,title:item.title,artist:item.artist,source:item.source}));
+  saveFavorites();
+  renderFavorites();
+  authMessage("Избранное синхронизировано с аккаунтом.");
+ }catch(error){
+  authMessage("Не удалось загрузить избранное: "+error.message);
+ }finally{favoritesSyncing=false;}
+}
+
+async function registerAccount(){
+ const username=document.getElementById("usernameInput").value.trim();
+ const password=document.getElementById("passwordInput").value;
+ if(!/^[a-zA-Z0-9_]{3,24}$/.test(username)){authMessage("Логин: 3–24 символа, только латинские буквы, цифры и _.");return;}
+ if(password.length<6){authMessage("Пароль должен содержать минимум 6 символов.");return;}
+ authMessage("Создаём аккаунт...");
+ const {data,error}=await supabase.auth.signUp({email:accountEmail(username),password,options:{data:{username}}});
+ if(error){authMessage(error.message);return;}
+ if(!data.session){authMessage("Аккаунт создан. Для входа отключи подтверждение email в Supabase: Authentication → Providers → Email → Confirm email OFF, затем войди.");return;}
+ currentUser=data.user;updateAccountUI();await loadCloudFavorites();
+}
+
+async function loginAccount(){
+ const username=document.getElementById("usernameInput").value.trim();
+ const password=document.getElementById("passwordInput").value;
+ if(!/^[a-zA-Z0-9_]{3,24}$/.test(username)||!password){authMessage("Проверь логин и пароль.");return;}
+ authMessage("Входим...");
+ const {data,error}=await supabase.auth.signInWithPassword({email:accountEmail(username),password});
+ if(error){authMessage("Не удалось войти. Проверь логин и пароль.");return;}
+ currentUser=data.user;updateAccountUI();await loadCloudFavorites();
+}
+
+async function logoutAccount(){
+ const {error}=await supabase.auth.signOut();
+ if(error){authMessage(error.message);return;}
+ currentUser=null;updateAccountUI();favorites=[];saveFavorites();renderFavorites();authMessage("Ты вышел из аккаунта.");
+}
+
+async function initAuth(){
+ const {data}=await supabase.auth.getSession();
+ currentUser=data.session?.user || null;updateAccountUI();
+ if(currentUser) await loadCloudFavorites();
+}
+
+document.getElementById("registerBtn").addEventListener("click",registerAccount);
+document.getElementById("loginBtn").addEventListener("click",loginAccount);
+document.getElementById("logoutBtn").addEventListener("click",logoutAccount);
 
 async function api(path){
  const response = await fetch(API + path);
@@ -144,14 +231,25 @@ function isFavorite(track){
  return favorites.some(item=>item.id===track.id && item.source===track.source);
 }
 
-function toggleFavorite(track){
- if(isFavorite(track)){
+async function toggleFavorite(track){
+ const removing=isFavorite(track);
+ if(removing){
   favorites=favorites.filter(item=>!(item.id===track.id && item.source===track.source));
  }else{
   favorites.push({id:track.id,title:track.title,artist:track.artist,source:track.source});
  }
- saveFavorites();
- renderFavorites();
+ saveFavorites();renderFavorites();
+ if(!currentUser){authMessage("Избранное пока сохранено только на этом устройстве. Войди, чтобы синхронизировать его.");return;}
+ try{
+  if(removing){
+   const {error}=await supabase.from("favorites").delete().eq("user_id",currentUser.id).eq("track_id",String(track.id)).eq("source",track.source || "audius");
+   if(error) throw error;
+  }else{
+   const {error}=await supabase.from("favorites").insert({user_id:currentUser.id,track_id:String(track.id),title:track.title,artist:track.artist || "",source:track.source || "audius"});
+   if(error) throw error;
+  }
+  authMessage("Избранное сохранено в аккаунте.");
+ }catch(error){authMessage("Ошибка синхронизации: "+error.message);}
 }
 
 function createTrackElement(track,queue=[]){
@@ -378,6 +476,7 @@ function renderFavorites(){
 
 
 renderFavorites();
+initAuth();
 loadPopular();
 </script>
 </body>
