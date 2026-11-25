@@ -644,6 +644,34 @@ loadPopular();
  function normalizeGenreTrack(track){
   return {id:String(track.id),title:track.title||"Без названия",artist:track.user?.name||"Неизвестный исполнитель",artwork:track.artwork?.["150x150"]||"",source:"audius",raw:track};
  }
+ function renderTracksSafe(containerId,list){
+  if(typeof window.renderAudiusList==="function"){
+   window.renderAudiusList(containerId,list);
+   return;
+  }
+  const container=document.getElementById(containerId);
+  if(!container)throw new Error("Не найден список "+containerId);
+  container.replaceChildren();
+  if(!list.length){
+   const empty=document.createElement("div");empty.className="empty";empty.textContent="Здесь пока ничего нет";container.append(empty);return;
+  }
+  list.forEach(track=>{
+   const row=document.createElement("div");row.className="track";
+   const cover=document.createElement("div");cover.className="cover";cover.textContent="♫";
+   if(track.artwork){cover.style.backgroundImage='url("'+track.artwork+'")';cover.style.backgroundSize="cover";}
+   const info=document.createElement("div");info.className="info";
+   const title=document.createElement("strong");title.textContent=track.title;
+   const artist=document.createElement("small");artist.textContent=track.artist;info.append(title,artist);
+   const play=document.createElement("button");play.type="button";play.textContent="▶";play.setAttribute("aria-label","Включить "+track.title);
+   play.addEventListener("click",()=>{
+    if(typeof window.playTrack==="function")window.playTrack(track,list);
+    else{const audio=document.getElementById("audio");if(audio){audio.src="https://discoveryprovider.audius.co/v1/tracks/"+encodeURIComponent(track.id)+"/stream?app_name="+app;audio.play().catch(()=>say("Нажми ещё раз для запуска трека."));}}
+   });
+   const like=document.createElement("button");like.type="button";like.className="favoriteBtn";like.textContent="♡";like.setAttribute("aria-label","Добавить в избранное");
+   like.addEventListener("click",()=>{if(typeof window.toggleFavorite==="function"){window.toggleFavorite(track);like.textContent=like.textContent==="♡"?"♥":"♡";like.classList.toggle("is-favorite");}});
+   row.append(cover,info,play,like);container.append(row);
+  });
+ }
  function canStream(t){
   const value=t.is_streamable!==undefined?t.is_streamable:t.isStreamable;
   return value===true || value==="true" || value===1;
@@ -677,7 +705,7 @@ loadPopular();
     const track=data[i];
     if((!genre||isGenre(track,genre))&&canStream(track))filtered.push(normalizeGenreTrack(track));
    }
-   window.renderAudiusList("russianList",filtered);
+   renderTracksSafe("russianList",filtered);
    say(filtered.length?"Найдено "+filtered.length+" полных треков жанра "+label+".":"В подборке Audius пока нет доступных полных треков этого жанра.");
   }catch(error){
    box.textContent="Ошибка загрузки: "+error.message;
@@ -698,7 +726,7 @@ loadPopular();
     const track=data[i];
     if(canStream(track))filtered.push(normalizeGenreTrack(track));
    }
-   window.renderAudiusList("searchList",filtered);
+   renderTracksSafe("searchList",filtered);
    say(filtered.length?"Найдено "+filtered.length+" полных доступных треков.":"Полные треки по запросу не найдены.");
   }catch(error){
    box.textContent="Поиск временно недоступен.";
