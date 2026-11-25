@@ -164,7 +164,8 @@ function setStatus(message){
 }
 
 function saveFavorites(){
- localStorage.setItem("yurtish_favorites", JSON.stringify(favorites));
+ try{localStorage.setItem("yurtish_favorites",JSON.stringify(favorites));return true;}
+ catch(error){authMessage("Не удалось сохранить избранное на устройстве: "+(error.message||"ошибка хранилища"));return false;}
 }
 
 function accountEmail(username){
@@ -278,28 +279,34 @@ function normalize(track){
 window.normalizeTrackForUI=normalize;
 function isRussianTrack(track){return /[А-Яа-яЁё]/.test(String(track.title||"")+" "+String(track.user?.name||track.artist||""));}
 function isFavorite(track){
- return favorites.some(item=>item.id===track.id && item.source===track.source);
+ const id=String(track.id),source=track.source||"audius";
+ return favorites.some(item=>String(item.id)===id&&(item.source||"audius")===source);
 }
 
 async function toggleFavorite(track){
- const removing=isFavorite(track);
- if(removing){
-  favorites=favorites.filter(item=>!(item.id===track.id && item.source===track.source));
- }else{
-  favorites.push({id:track.id,title:track.title,artist:track.artist,source:track.source});
- }
+ if(!track||track.id===undefined||track.id===null){authMessage("Не удалось определить трек.");return false;}
+ const id=String(track.id),source=track.source||"audius",removing=isFavorite({...track,id,source});
+ if(removing)favorites=favorites.filter(item=>!(String(item.id)===id&&(item.source||"audius")===source));
+ else favorites.push({id,title:track.title||"Без названия",artist:track.artist||"",source});
  saveFavorites();renderFavorites();
- if(!currentUser){authMessage("Избранное пока сохранено только на этом устройстве. Войди, чтобы синхронизировать его.");return;}
+ document.querySelectorAll(".favoriteBtn").forEach(button=>{
+  if(button.dataset.trackId===id&&(button.dataset.trackSource||"audius")===source){
+   button.textContent=removing?"♡":"♥";button.classList.toggle("is-favorite",!removing);
+   button.setAttribute("aria-pressed",removing?"false":"true");
+  }
+ });
+ if(!currentUser){authMessage("Избранное сохранено на этом устройстве.");return true;}
+ if(!supabase){authMessage("Избранное сохранено на устройстве; синхронизация недоступна.");return true;}
  try{
   if(removing){
-   const {error}=await supabase.from("favorites").delete().eq("user_id",currentUser.id).eq("track_id",String(track.id)).eq("source",track.source || "audius");
-   if(error) throw error;
+   const {error}=await supabase.from("favorites").delete().eq("user_id",currentUser.id).eq("track_id",id).eq("source",source);
+   if(error)throw error;
   }else{
-   const {error}=await supabase.from("favorites").insert({user_id:currentUser.id,track_id:String(track.id),title:track.title,artist:track.artist || "",source:track.source || "audius"});
-   if(error) throw error;
+   const {error}=await supabase.from("favorites").upsert({user_id:currentUser.id,track_id:id,title:track.title||"Без названия",artist:track.artist||"",source},{onConflict:"user_id,track_id,source"});
+   if(error)throw error;
   }
-  authMessage("Избранное сохранено в аккаунте.");
- }catch(error){authMessage("Ошибка синхронизации: "+error.message);}
+  authMessage("Избранное сохранено в аккаунте.");return true;
+ }catch(error){authMessage("Избранное осталось на устройстве. Ошибка синхронизации: "+(error.message||"ошибка"));return true;}
 }
 
 function createTrackElement(track,queue=[]){
@@ -330,20 +337,13 @@ function createTrackElement(track,queue=[]){
 
  const like=document.createElement("button");
  like.type="button";
+ like.dataset.trackId=String(track.id);
+ like.dataset.trackSource=track.source||"audius";
  like.className="favoriteBtn"+(isFavorite(track)?" is-favorite":"");
  like.textContent=isFavorite(track)?"♥":"♡";
  like.setAttribute("aria-label",isFavorite(track)?"Убрать из избранного":"Добавить в избранное");
  like.setAttribute("aria-pressed",isFavorite(track)?"true":"false");
- like.addEventListener("click",event=>{
-  event.preventDefault();
-  event.stopPropagation();
-  toggleFavorite(track);
-  const active=isFavorite(track);
-  like.textContent=active?"♥":"♡";
-  like.classList.toggle("is-favorite",active);
-  like.setAttribute("aria-pressed",active?"true":"false");
-  like.setAttribute("aria-label",active?"Убрать из избранного":"Добавить в избранное");
- });
+ like.addEventListener("click",event=>{event.preventDefault();event.stopPropagation();toggleFavorite(track);});
 
  row.append(cover,info,play,like);
  return row;
@@ -351,6 +351,7 @@ function createTrackElement(track,queue=[]){
 
 function renderList(containerId,list){
  const container=document.getElementById(containerId);
+ if(!container)return;
  const unique=[],ids=new Set(),names=new Set();
  const norm=value=>String(value||"").normalize("NFKC").toLocaleLowerCase().replace(/\s+/g," ").trim();
  (Array.isArray(list)?list:[]).forEach(track=>{
@@ -449,7 +450,9 @@ audio.addEventListener("pause",()=>{document.getElementById("playBtn").textConte
 audio.addEventListener("waiting",()=>setStatus("Загрузка аудио..."));
 audio.addEventListener("error",()=>{
  document.getElementById("playBtn").textContent="▶";
- setStatus("Ошибка воспроизведения. Попробуй другой трек.");
+ const code=audio.error?audio.error.code:0;
+ const detail=({1:"загрузка отменена",2:"ошибка сети",3:"не удалось декодировать аудио",4:"формат или адрес аудио недоступен"})[code]||"неизвестная ошибка";
+ setStatus("Ошибка аудио: "+detail+". Попробуй другой трек.");
 });
 const progressBar=document.getElementById("progress");
 const timeLabel=document.getElementById("timeLabel");
@@ -471,6 +474,8 @@ audio.addEventListener("seeking",refreshProgress);
 audio.addEventListener("seeked",refreshProgress);
 audio.addEventListener("emptied",refreshProgress);
 audio.addEventListener("loadeddata",refreshProgress);
+audio.addEventListener("canplay",refreshProgress);
+audio.preload="metadata";
 function seekAudio(){
  const target=Number(progressBar.value);
  if(Number.isFinite(audio.duration)&&audio.duration>0&&Number.isFinite(target)){
