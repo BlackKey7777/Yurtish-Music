@@ -601,6 +601,52 @@ loadPopular();
  if(authClientV2) authClientV2.auth.getSession().then(r=>refreshUser(r.data.session?.user||null)).catch(e=>say("Ошибка проверки сессии: "+e.message));
 })();
 </script>
+
+<script>
+/* Резервное подключение основных кнопок для Safari */
+(function(){
+ function run(fn, fallbackMessage){
+  try{
+   if(typeof fn!=="function") throw new Error(fallbackMessage);
+   const result=fn();
+   if(result && typeof result.catch==="function") result.catch(e=>{
+    const s=document.getElementById("status"); if(s) s.textContent="Ошибка: "+(e.message||String(e));
+   });
+  }catch(e){
+   const s=document.getElementById("status"); if(s) s.textContent="Кнопка нажалась, но функция не запустилась: "+(e.message||String(e));
+  }
+ }
+ const search=document.getElementById("searchBtn");
+ if(search) search.onclick=function(){
+  const q=document.getElementById("searchInput");
+  run(()=>window.searchMusic && window.searchMusic(q?q.value:""),"Функция поиска не загрузилась");
+ };
+ const input=document.getElementById("searchInput");
+ if(input) input.onkeydown=function(e){if(e.key==="Enter"){e.preventDefault();search?.click();}};
+ document.querySelectorAll("[data-queries]").forEach(button=>{
+  button.onclick=function(){
+   const queries=(button.getAttribute("data-queries")||"").split("|");
+   run(()=>window.searchMusic && window.searchMusic(queries,"russianList"),"Функция жанров не загрузилась");
+   document.querySelectorAll("[data-queries]").forEach(b=>b.classList.toggle("active",b===button));
+  };
+ });
+ const prev=document.getElementById("prevBtn");
+ if(prev) prev.onclick=()=>run(()=>window.skipTrack && window.skipTrack(-1),"Плеер не загрузился");
+ const next=document.getElementById("nextBtn");
+ if(next) next.onclick=()=>run(()=>window.skipTrack && window.skipTrack(1),"Плеер не загрузился");
+ const play=document.getElementById("playBtn");
+ if(play) play.onclick=function(){
+  const audio=document.getElementById("audio");
+  if(!audio) return;
+  if(audio.paused) run(()=>audio.play(),"Не удалось включить трек");
+  else audio.pause();
+ };
+ document.querySelectorAll("button").forEach(button=>{
+  button.style.pointerEvents="auto";
+  button.style.touchAction="manipulation";
+ });
+})();
+</script>
 </body>
 </html>
 
