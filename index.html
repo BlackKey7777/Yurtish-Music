@@ -283,6 +283,7 @@ function normalize(track){
  };
 }
 window.normalizeTrackForUI=normalize;
+function isRussianTrack(track){return /[А-Яа-яЁё]/.test(String(track.title||"")+" "+String(track.user?.name||track.artist||""));}
 function isFavorite(track){
  return favorites.some(item=>item.id===track.id && item.source===track.source);
 }
@@ -675,10 +676,11 @@ loadPopular();
   const value=document.getElementById("vkProfileUrl")?.value.trim()||"";
   let url;
   try{url=new URL(value);}catch(_){say("Вставь полную ссылку на открытый профиль VK.");return;}
-  if(!/(^|\\.)vk\\.(com|ru)$/i.test(url.hostname)){say("Нужна ссылка именно на vk.com или vk.ru.");return;}
-  const path=url.pathname.replace(/\\/$/,"");
+  if(!/(^|\.)vk\.(com|ru)$/i.test(url.hostname)){say("Нужна ссылка именно на vk.com или vk.ru.");return;}
+  const path=url.pathname.replace(/\/$/,"");
   if(!path || path==="/audio"){say("Вставь ссылку на профиль, а не на главную страницу VK.");return;}
-  const audioUrl="https://vk.com/audio?owner_id="+encodeURIComponent(path);
+  const profilePath=path.replace(/^\//,"");
+  const audioUrl="https://vk.com/"+encodeURIComponent(profilePath)+"?section=audio";
   window.open(audioUrl,"_blank","noopener");
   say("Открываю музыкальный раздел VK. Доступность записей зависит от настроек профиля и VK.");
  });
