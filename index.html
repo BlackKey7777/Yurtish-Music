@@ -520,6 +520,80 @@ renderFavorites();
 initAuth();
 loadPopular();
 </script>
+
+<script>
+(function(){
+ const msg = document.getElementById("authMessage");
+ const say = t => { if(msg) msg.textContent=t; };
+ const emailFor = u => u.trim().toLowerCase()+"@accounts.yurtishmusic.com";
+ let authClientV2 = null;
+ try {
+  if(window.supabase && typeof window.supabase.createClient==="function"){
+   authClientV2=window.supabase.createClient("https://xgdebznuvmrfigoczuoi.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnZGViem51dm1yZmlnb2N6dW9pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU2NDE5MTMsImV4cCI6MjExMTIxNzkxM30.RkAQFxSwVvtnp3nBTCfRpxRvScH9f2rrhXfmlWLj4v0");
+  }
+ } catch(e){ say("Не удалось запустить сервис аккаунтов: "+e.message); }
+ function fields(){
+  const u=document.getElementById("usernameInput")?.value.trim()||"";
+  const p=document.getElementById("passwordInput")?.value||"";
+  if(!/^[a-zA-Z0-9_]{3,24}$/.test(u)){say("Логин: 3–24 символа, латинские буквы, цифры и _.");return null;}
+  if(p.length<6){say("Пароль должен содержать минимум 6 символов.");return null;}
+  if(!authClientV2){say("Supabase не загрузился. Проверь интернет или блокировщик контента Safari.");return null;}
+  return {u,p};
+ }
+ async function refreshUser(user){
+  const status=document.getElementById("accountStatus");
+  const box=document.getElementById("authFields");
+  const logout=document.getElementById("logoutBtn");
+  if(status) status.textContent=user ? "Вы вошли как "+(user.user_metadata?.username||user.email.split("@")[0]) : "Вход не выполнен";
+  if(box) box.style.display=user?"none":"block";
+  if(logout) logout.style.display=user?"block":"none";
+  if(user){
+   try{
+    const q=await authClientV2.from("favorites").select("track_id,title,artist,source").eq("user_id",user.id);
+    if(q.error) throw q.error;
+    if(typeof favorites!=="undefined"){
+     favorites=q.data.map(x=>({id:x.track_id,title:x.title,artist:x.artist,source:x.source}));
+     if(typeof saveFavorites==="function") saveFavorites();
+     if(typeof renderFavorites==="function") renderFavorites();
+    }
+    say("Вход выполнен. Избранное синхронизировано.");
+   }catch(e){say("Вход выполнен, но избранное не загрузилось: "+e.message);}
+  }
+ }
+ window.registerAccount=async function(){
+  const f=fields(); if(!f)return;
+  say("Создаём аккаунт...");
+  try{
+   const r=await Promise.race([authClientV2.auth.signUp({email:emailFor(f.u),password:f.p,options:{data:{username:f.u}}}),new Promise((_,rej)=>setTimeout(()=>rej(new Error("Supabase не ответил за 15 секунд.")),15000))]);
+   if(r.error){say("Ошибка регистрации: "+r.error.message);return;}
+   if(!r.data.session){say("Аккаунт создан, но Supabase не выдал сессию. Проверь Confirm email = OFF.");return;}
+   await refreshUser(r.data.user);
+  }catch(e){say("Регистрация не выполнена: "+e.message);}
+ };
+ window.loginAccount=async function(){
+  const f=fields(); if(!f)return;
+  say("Выполняем вход...");
+  try{
+   const r=await Promise.race([authClientV2.auth.signInWithPassword({email:emailFor(f.u),password:f.p}),new Promise((_,rej)=>setTimeout(()=>rej(new Error("Supabase не ответил за 15 секунд.")),15000))]);
+   if(r.error){say("Ошибка входа: "+r.error.message);return;}
+   await refreshUser(r.data.user);
+  }catch(e){say("Вход не выполнен: "+e.message);}
+ };
+ window.logoutAccount=async function(){
+  if(!authClientV2){say("Сервис аккаунтов недоступен.");return;}
+  const r=await authClientV2.auth.signOut();
+  if(r.error){say(r.error.message);return;}
+  await refreshUser(null);say("Ты вышел из аккаунта.");
+ };
+ const reg=document.getElementById("registerBtn");
+ const login=document.getElementById("loginBtn");
+ if(reg) reg.onclick=()=>window.registerAccount();
+ if(login) login.onclick=()=>window.loginAccount();
+ const logout=document.getElementById("logoutBtn");
+ if(logout) logout.onclick=()=>window.logoutAccount();
+ if(authClientV2) authClientV2.auth.getSession().then(r=>refreshUser(r.data.session?.user||null)).catch(e=>say("Ошибка проверки сессии: "+e.message));
+})();
+</script>
 </body>
 </html>
 
