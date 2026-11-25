@@ -641,6 +641,9 @@ loadPopular();
   }
   throw new Error("Не удалось связаться с Audius: "+(lastError?.message||"проверь интернет"));
  }
+ function normalizeGenreTrack(track){
+  return {id:String(track.id),title:track.title||"Без названия",artist:track.user?.name||"Неизвестный исполнитель",artwork:track.artwork?.["150x150"]||"",source:"audius",raw:track};
+ }
  function canStream(t){
   const value=t.is_streamable!==undefined?t.is_streamable:t.isStreamable;
   return value===true || value==="true" || value===1;
@@ -668,7 +671,7 @@ loadPopular();
    }else{
     data=await fetchTracks("/tracks/trending?limit=100&time=week&app_name="+app);
    }
-   const filtered=data.filter(t=>!genre||isGenre(t,genre)).filter(canStream).map(window.normalizeTrackForUI);
+   const filtered=data.filter(t=>!genre||isGenre(t,genre)).filter(canStream).map(normalizeGenreTrack);
    window.renderAudiusList("russianList",filtered);
    say(filtered.length?"Найдено "+filtered.length+" полных треков жанра "+label+".":"В подборке Audius пока нет доступных полных треков этого жанра.");
   }catch(error){
@@ -684,7 +687,7 @@ loadPopular();
   say("Ищем в Audius: "+query);
   try{
    const data=await fetchTracks("/tracks/search?query="+encodeURIComponent(query)+"&limit=50&app_name="+app);
-   const filtered=data.filter(canStream).map(window.normalizeTrackForUI);
+   const filtered=data.filter(canStream).map(normalizeGenreTrack);
    window.renderAudiusList("searchList",filtered);
    say(filtered.length?"Найдено "+filtered.length+" полных доступных треков.":"Полные треки по запросу не найдены.");
   }catch(error){
