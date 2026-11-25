@@ -16,7 +16,7 @@ nav{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template
 nav button{display:block;position:relative;background:#24232b;color:#ddd;border:0;border-radius:10px;padding:10px 2px;white-space:nowrap;min-width:0;width:100%;height:42px;font-size:10px;line-height:1;touch-action:manipulation;pointer-events:auto;-webkit-appearance:none}
 .chip{background:#24232b;color:#ddd;border:0;border-radius:20px;padding:10px 15px;white-space:nowrap}
 nav button.active,.chip.active{background:#9333ea;color:white}
-main{padding:8px 16px 245px}
+main{padding:8px 16px 190px}
 h2{font-size:20px;margin:18px 0 12px}
 .search{display:flex;gap:8px;margin:12px 0}
 input[type=search]{min-width:0;flex:1;background:#24232b;border:1px solid #393641;border-radius:12px;padding:14px;color:white;font-size:15px}
@@ -29,7 +29,7 @@ button{cursor:pointer}
 .info small{color:#999;display:block;margin-top:5px}
 .track button{background:#292632;border:0;color:white;border-radius:10px;padding:9px 11px}
 .empty{color:#888;text-align:center;padding:35px 10px}
-#player{position:fixed;bottom:58px;left:0;right:0;background:#1b1922;border-top:1px solid #393340;padding:9px 16px;z-index:20;pointer-events:auto}
+#player{position:fixed;bottom:0;left:0;right:0;background:#1b1922;border-top:1px solid #393340;padding:12px 16px calc(12px + env(safe-area-inset-bottom));z-index:20;pointer-events:auto}
 .player-top{display:flex;align-items:center;gap:12px}
 #nowTitle{font-size:13px;font-weight:bold;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #playBtn{background:#9333ea;color:white;border:0;border-radius:50%;width:43px;height:43px;font-size:18px;flex-shrink:0}.player-controls{display:flex;align-items:center;gap:10px}.skipBtn{background:#302c39;color:#fff;border:0;border-radius:50%;width:36px;height:36px;font-size:17px;flex-shrink:0}
@@ -47,21 +47,13 @@ button{cursor:pointer}
 <div class="subtitle">ТВОЯ МУЗЫКА. ТВОИ ПРАВИЛА.</div>
 </header>
 
-<nav aria-label="Разделы приложения">
-<button class="active" type="button" data-tab="popular">Популярное</button>
-<button type="button" data-tab="russian">Русская</button>
-<button type="button" data-tab="search">Поиск</button>
-<button type="button" data-tab="mine">Мои треки</button>
-<button type="button" data-tab="favorites">Избранное</button>
-</nav>
-
 <main>
 <section id="popular">
 <h2>Популярное</h2>
 <div id="popularList"></div>
 </section>
 
-<section id="russian" hidden>
+<section id="russian">
 <h2>Русская музыка</h2>
 <div class="chips">
 <button class="chip" data-query="русский рэп">Русский рэп</button>
@@ -72,7 +64,7 @@ button{cursor:pointer}
 <div id="russianList"></div>
 </section>
 
-<section id="search" hidden>
+<section id="search">
 <h2>Поиск музыки</h2>
 <div class="search">
 <input id="searchInput" type="search" placeholder="Название или исполнитель...">
@@ -81,7 +73,7 @@ button{cursor:pointer}
 <div id="searchList"></div>
 </section>
 
-<section id="mine" hidden>
+<section id="mine">
 <h2>Мои треки</h2>
 <label class="upload">
 ＋ Добавить музыку с телефона
@@ -91,7 +83,7 @@ button{cursor:pointer}
 <div id="mineList"></div>
 </section>
 
-<section id="favorites" hidden>
+<section id="favorites">
 <h2>Избранное ♥</h2>
 <div id="favoriteList"></div>
 </section>
@@ -344,16 +336,9 @@ function renderFavorites(){
  renderList("favoriteList",list);
 }
 
-document.querySelectorAll("nav button[data-tab]").forEach(button=>{
- button.addEventListener("click",()=>{
-  document.querySelectorAll("nav button").forEach(item=>item.classList.remove("active"));
-  button.classList.add("active");
-  document.querySelectorAll("main section").forEach(section=>section.hidden=true);
-  document.getElementById(button.dataset.tab).hidden=false;
-  if(button.dataset.tab==="favorites") renderFavorites();
- });
-});
 
+
+renderFavorites();
 loadPopular();
 </script>
 </body>
