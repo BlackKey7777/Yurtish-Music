@@ -626,19 +626,20 @@ loadPopular();
  const base="https://discoveryprovider.audius.co/v1";
  const app="YurtishMusic";
  async function fetchTracks(path){
-  const hosts=[base,"https://api.audius.co/v1"];
+  const hosts=["https://api.audius.co/v1",base];
   let lastError=null;
   for(const host of hosts){
    try{
-    const response=await fetch(host+path,{headers:{Accept:"application/json"}});
-    if(!response.ok)throw new Error("HTTP "+response.status);
+    const response=await fetch(host+path,{method:"GET",mode:"cors",cache:"no-store",headers:{Accept:"application/json"}});
+    if(!response.ok)throw new Error(host.replace("https://","")+" вернул HTTP "+response.status);
     const body=await response.json();
-    if(body&&body.data&&Array.isArray(body.data))return body.data;
+    if(body&&Array.isArray(body.data))return body.data;
+    if(body&&body.data&&Array.isArray(body.data.tracks))return body.data.tracks;
     if(Array.isArray(body))return body;
-    throw new Error("Неожиданный формат ответа Audius");
+    throw new Error("Audius вернул неожиданный формат данных");
    }catch(error){lastError=error;}
   }
-  throw new Error("Оба сервера Audius недоступны: "+(lastError?.message||"ошибка сети"));
+  throw new Error("Не удалось связаться с Audius: "+(lastError?.message||"проверь интернет"));
  }
  function canStream(t){
   const value=t.is_streamable!==undefined?t.is_streamable:t.isStreamable;
@@ -655,14 +656,24 @@ loadPopular();
   box.textContent="Подбираем треки по жанру "+label+"...";
   say("Загружаем жанр "+label+" из Audius...");
   try{
-   const query=genre?("?genre="+encodeURIComponent(genre)+"&limit=100&app_name="+app):("?limit=100&app_name="+app);
-   const data=await fetchTracks("/tracks/trending"+query);
-   const filtered=data.filter(canStream).filter(t=>!genre||isGenre(t,genre)).map(normalize);
+   const suffix="&limit=100&time=week&app_name="+app;
+   let data;
+   if(genre){
+    try{
+     data=await fetchTracks("/tracks/trending?genre="+encodeURIComponent(genre)+suffix);
+    }catch(primaryError){
+     say("Пробуем альтернативную загрузку жанра...");
+     data=await fetchTracks("/tracks/trending?limit=100&time=week&app_name="+app);
+    }
+   }else{
+    data=await fetchTracks("/tracks/trending?limit=100&time=week&app_name="+app);
+   }
+   const filtered=data.filter(t=>!genre||isGenre(t,genre)).filter(canStream).map(normalize);
    renderList("russianList",filtered);
-   say(filtered.length?"Найдено "+filtered.length+" полных треков жанра "+label+".":"В этом жанре пока нет доступных полноценных треков.");
+   say(filtered.length?"Найдено "+filtered.length+" полных треков жанра "+label+".":"В подборке Audius пока нет доступных полных треков этого жанра.");
   }catch(error){
-   box.textContent="Не удалось загрузить жанр. Попробуй ещё раз.";
-   say("Ошибка Audius: "+error.message);
+   box.textContent="Ошибка загрузки: "+error.message;
+   say("Не удалось загрузить жанр: "+error.message);
   }
  }
  async function showSearch(){
