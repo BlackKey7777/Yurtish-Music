@@ -29,7 +29,7 @@ button{cursor:pointer}
 .info small{color:#999;display:block;margin-top:5px}
 .track button{background:#292632;border:0;color:white;border-radius:10px;padding:9px 11px}
 .track .favoriteBtn{min-width:40px;min-height:40px;font-size:22px;line-height:1;color:#aaa;background:#292632;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
-.track .favoriteBtn.is-favorite{color:#ef4444;background:#3b2026}.track .favoriteBtn{color:#ef4444}
+.track .favoriteBtn.is-favorite{color:#ef4444;background:#3b2026}
 .empty{color:#888;text-align:center;padding:35px 10px}
 #player{position:fixed;bottom:0;left:0;right:0;background:#1b1922;border-top:1px solid #393340;padding:12px 16px calc(12px + env(safe-area-inset-bottom));z-index:20;pointer-events:auto}
 .player-top{display:flex;align-items:center;gap:12px}
@@ -68,6 +68,8 @@ button{cursor:pointer}
 <section id="popular">
 <h2>Популярное</h2>
 <div id="popularList"></div>
+<h2>Новинки 2026</h2>
+<div id="new2026List"></div>
 </section>
 
 <section id="russian">
@@ -293,6 +295,7 @@ async function toggleFavorite(track){
   if(button.dataset.trackId===id&&(button.dataset.trackSource||"audius")===source){
    button.textContent=removing?"♡":"♥";button.classList.toggle("is-favorite",!removing);
    button.setAttribute("aria-pressed",removing?"false":"true");
+   button.setAttribute("aria-label",removing?"Добавить в избранное":"Убрать из избранного");
   }
  });
  if(!currentUser){authMessage("Избранное сохранено на этом устройстве.");return true;}
@@ -371,15 +374,58 @@ function renderList(containerId,list){
  list.forEach(track=>container.append(createTrackElement(track,list)));
 }
 window.renderAudiusList=renderList;
+const RUSSIAN_ARTISTS_2026=["booker","horus","gone.fludd","icegergert","metox","25/17","мс","bato","baby cute","bumble beezy","kai angel","4n way","mary gu","лсп","yanix","lizer","мoт","мот","yasmi","t-fest","антoха мс","антоха мс","смоки мо","sqwiij","mayot","полья","криминальный бит","1.kla$"];
+function isRussianCatalogTrack(track){
+ const title=String(track.title||"").toLocaleLowerCase();
+ const artist=String(track.user?.name||track.artist||"").toLocaleLowerCase();
+ const text=title+" "+artist;
+ return /[а-яё]/i.test(text)||RUSSIAN_ARTISTS_2026.some(name=>artist.includes(name));
+}
+function trackYear(track){
+ const raw=track.release_date||track.releaseDate||track.created_at||track.createdAt||"";
+ if(!raw)return 0;
+ const d=new Date(raw);
+ return Number.isNaN(d.getTime())?0:d.getFullYear();
+}
+async function searchAudiusQueries(queries,limit=50){
+ const batches=await Promise.all(queries.map(q=>api("/tracks/search?query="+encodeURIComponent(q)+"&limit="+limit+"&app_name="+APP).catch(()=>[])));
+ const found=[],ids=new Set(),names=new Set();
+ for(const batch of batches){
+  for(const raw of batch||[]){
+   const track=normalize(raw);
+   const name=(track.title+"|"+track.artist).toLocaleLowerCase().replace(/\\s+/g," ").trim();
+   if(!track.id||!track.title||!isRussianCatalogTrack(raw)||ids.has(track.id)||names.has(name))continue;
+   ids.add(track.id);names.add(name);found.push({ ...track, raw });
+  }
+ }
+ return found;
+}
 async function loadPopular(){
- setStatus("Загружаем популярные треки...");
+ setStatus("Ищем популярные русскоязычные треки...");
  try{
-  const data=await api(`/tracks/trending?limit=30&app_name=${APP}`);
-  tracks=data.map(normalize).filter(track=>track.id&&track.title);
+  const found=await searchAudiusQueries(["русский рэп","русская музыка","русский поп","русский рок","russian rap russian vocals","russian music cyrillic"],50);
+  tracks=found;
   renderList("popularList",tracks);
-  setStatus("Популярные треки загружены");
+  setStatus(found.length?"Загружено "+found.length+" русскоязычных треков. Иностранный трендовый каталог отключён.":"В открытом каталоге пока не нашлись русскоязычные треки.");
  }catch(error){
-  setStatus("Не удалось загрузить каталог. Попробуй позже.");
+  setStatus("Не удалось загрузить русскоязычный каталог: "+error.message);
+ }
+}
+async function loadNew2026(){
+ const box=document.getElementById("new2026List");
+ if(!box)return;
+ box.textContent="Ищем релизы 2026 года в открытом каталоге...";
+ const queries=["BOOKER 8BALLZ","Horus Rigor Mortis","GONE.Fludd Любовь и Ракеты","ICEGERGERT AMEN","Metox Божия Корова","25/17 Подарок","МОТ Любовь не каршеринг","YASMI T-Fest Кого ты ждала","Baby Cute АКТУАЛЬНО","Антоха МС Айда","BATO The Alarmist","русские новинки 2026"];
+ try{
+  const found=await searchAudiusQueries(queries,30);
+  const recent=found.filter(track=>trackYear(track.raw)===2026);
+  renderList("new2026List",recent);
+  box.dataset.loaded="true";
+  if(!recent.length)box.textContent="В Audius пока не найдено подтверждённых полных записей с датой релиза или загрузки 2026 года. Не подменяю их старыми треками.";
+  return recent.length;
+ }catch(error){
+  box.textContent="Не удалось загрузить новинки 2026: "+error.message;
+  return 0;
  }
 }
 
@@ -391,7 +437,7 @@ async function searchMusic(query,target="searchList"){
  setStatus("Поиск в Audius: "+term);
  try{
   const data=await api("/tracks/search?query="+encodeURIComponent(term)+"&limit=50&app_name="+APP);
-  const results=data.map(normalize).filter(track=>track.id&&track.title);
+  const results=data.filter(isRussianCatalogTrack).map(normalize).filter(track=>track.id&&track.title);
   renderList(target,results);
   setStatus(results.length?"Найдено "+results.length+" треков. Воспроизведение — полная версия, если она доступна в Audius.":"Полные доступные треки не найдены.");
  }catch(error){
@@ -536,8 +582,10 @@ window.searchMusic = searchMusic;
 window.skipTrack = skipTrack;
 window.playTrack = playTrack;
 window.toggleFavorite = toggleFavorite;
+window.isFavoriteTrack = isFavorite;
 initAuth();
 loadPopular();
+loadNew2026();
 </script>
 
 <script>
@@ -676,7 +724,7 @@ loadPopular();
     else{const audio=document.getElementById("audio");if(audio){audio.src="https://discoveryprovider.audius.co/v1/tracks/"+encodeURIComponent(track.id)+"/stream?app_name="+app;audio.play().catch(()=>say("Нажми ещё раз для запуска трека."));}}
    });
    const like=document.createElement("button");like.type="button";like.className="favoriteBtn";like.textContent="♡";like.setAttribute("aria-label","Добавить в избранное");
-   like.addEventListener("click",()=>{if(typeof window.toggleFavorite==="function"){window.toggleFavorite(track);like.textContent=like.textContent==="♡"?"♥":"♡";like.classList.toggle("is-favorite");}});
+   like.dataset.trackId=String(track.id);like.dataset.trackSource=track.source||"audius";like.classList.toggle("is-favorite",typeof window.isFavoriteTrack==="function"&&window.isFavoriteTrack(track));like.textContent=like.classList.contains("is-favorite")?"♥":"♡";like.addEventListener("click",event=>{event.preventDefault();event.stopPropagation();if(typeof window.toggleFavorite==="function"){window.toggleFavorite(track);const active=typeof window.isFavoriteTrack==="function"&&window.isFavoriteTrack(track);like.textContent=active?"♥":"♡";like.classList.toggle("is-favorite",!!active);like.setAttribute("aria-pressed",active?"true":"false");}});
    row.append(cover,info,play,like);container.append(row);
   });
  }
