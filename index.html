@@ -88,7 +88,6 @@ button{cursor:pointer}
 <button class="action" id="searchBtn">Найти</button>
 </div>
 <div id="searchList"></div>
-<div id="platformSearchLinks" class="platform-links" aria-label="Искать на других площадках"></div>
 <div class="vk-profile-box">
  <strong>Музыка из открытого профиля VK</strong>
  <input id="vkProfileUrl" type="url" inputmode="url" placeholder="Вставь ссылку на профиль VK">
@@ -655,22 +654,7 @@ loadPopular();
   const artist=String(track.user?.name||track.artist||"");
   return /[А-Яа-яЁё]/.test(title+" "+artist);
  }
- function platformSearchLinks(query){
-  const box=document.getElementById("platformSearchLinks");
-  if(!box)return;
-  box.replaceChildren();
-  const q=encodeURIComponent(query);
-  const links=[
-   ["VK Музыка","https://vk.com/audio?q="+q],
-   ["YouTube","https://www.youtube.com/results?search_query="+q],
-   ["Яндекс Музыка","https://music.yandex.ru/search?text="+q],
-   ["Spotify","https://open.spotify.com/search/"+q],
-   ["SoundCloud","https://soundcloud.com/search/sounds?q="+q]
-  ];
-  links.forEach(([label,url])=>{
-   const a=document.createElement("a");a.href=url;a.target="_blank";a.rel="noopener noreferrer";a.textContent=label;box.append(a);
-  });
- }
+
  const vkButton=document.getElementById("vkProfileBtn");
  if(vkButton)vkButton.addEventListener("click",()=>{
   const value=document.getElementById("vkProfileUrl")?.value.trim()||"";
@@ -746,14 +730,17 @@ loadPopular();
      :["русская музыка","русский рэп","русский рок","русский поп","russian music"];
   try{
    const batches=await Promise.all(queries.map(q=>fetchTracks("/tracks/search?query="+encodeURIComponent(q)+"&limit=50&app_name="+app).catch(()=>[])));
-   const seen=new Set(),filtered=[];
+   const seen=new Set(),seenNames=new Set(),filtered=[];
    for(const batch of batches){
     if(!Array.isArray(batch))continue;
     for(const track of batch){
      const key=String(track.id);
      if(!key||seen.has(key)||!canStream(track))continue;
-     seen.add(key);
-     filtered.push(normalizeGenreTrack(track));
+     const normalized=normalizeGenreTrack(track);
+     const nameKey=(normalized.title+"|"+normalized.artist).toLocaleLowerCase().replace(/\\s+/g," ").trim();
+     if(seenNames.has(nameKey))continue;
+     seen.add(key);seenNames.add(nameKey);
+     filtered.push(normalized);
     }
    }
    renderTracksSafe("russianList",filtered);
@@ -767,19 +754,23 @@ loadPopular();
   const query=document.getElementById("searchInput")?.value.trim()||"";
   const box=document.getElementById("searchList");
   if(!query){say("Введи название трека или исполнителя.");return;}
-  platformSearchLinks(query);
   box.textContent="Ищем треки в каталоге Audius...";
   say("Ищем треки в Audius и показываем поиск на других площадках: "+query);
   try{
    const data=await fetchTracks("/tracks/search?query="+encodeURIComponent(query)+"&limit=50&app_name="+app);
-   const filtered=[];
+   const filtered=[],seenIds=new Set(),seenNames=new Set();
    if(!Array.isArray(data))throw new Error("Audius вернул не список треков");
    for(let i=0;i<data.length;i++){
     const track=data[i];
-    if(canStream(track))filtered.push(normalizeGenreTrack(track));
+    if(!canStream(track))continue;
+    const normalized=normalizeGenreTrack(track);
+    const id=String(normalized.id);
+    const nameKey=(normalized.title+"|"+normalized.artist).toLocaleLowerCase().replace(/\\s+/g," ").trim();
+    if(seenIds.has(id)||seenNames.has(nameKey))continue;
+    seenIds.add(id);seenNames.add(nameKey);filtered.push(normalized);
    }
    renderTracksSafe("searchList",filtered);
-   say(filtered.length?"Найдено "+filtered.length+" треков Audius. Для других площадок используй кнопки выше.":"В каталоге Audius по этому запросу ничего нет. Проверь кнопки поиска на других площадках выше.");
+   say(filtered.length?"Найдено "+filtered.length+" уникальных треков.":"По этому запросу треков не найдено.");
   }catch(error){
    box.textContent="Поиск временно недоступен.";
    say("Ошибка поиска Audius: "+error.message);
