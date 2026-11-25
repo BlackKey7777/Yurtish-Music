@@ -147,7 +147,14 @@ let myTracks = [];
 let currentTrack = null;
 let currentQueue = [];
 let currentIndex = -1;
-let favorites = JSON.parse(localStorage.getItem("yurtish_favorites") || "[]");
+let favorites = [];
+try {
+ const savedFavorites = JSON.parse(localStorage.getItem("yurtish_favorites") || "[]");
+ favorites = Array.isArray(savedFavorites) ? savedFavorites : [];
+} catch (error) {
+ console.warn("Не удалось прочитать избранное, запускаем с пустым списком:", error);
+ try { localStorage.removeItem("yurtish_favorites"); } catch (_) {}
+}
 let currentUser = null;
 let favoritesSyncing = false;
 
