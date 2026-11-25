@@ -41,6 +41,7 @@ button{cursor:pointer}
 .upload input{display:none}
 .hint{color:#888;font-size:12px;line-height:1.5}
 .chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px}
+.platform-links{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.platform-links a{display:inline-block;background:#24232b;border:1px solid #393641;border-radius:10px;padding:10px 12px;color:#ddd;text-decoration:none;font-size:12px}.vk-profile-box{margin:14px 0;padding:13px;background:#1b1922;border:1px solid #393340;border-radius:12px}.vk-profile-box input{width:100%;margin:8px 0;background:#24232b;border:1px solid #393641;border-radius:10px;padding:12px;color:white;font-size:14px}.vk-profile-box button{background:#9333ea;color:white;border:0;border-radius:10px;padding:11px 14px}.source-note{font-size:11px;color:#999;line-height:1.45;margin:8px 0}
 </style>
 </head>
 <body>
@@ -87,6 +88,13 @@ button{cursor:pointer}
 <button class="action" id="searchBtn">Найти</button>
 </div>
 <div id="searchList"></div>
+<div id="platformSearchLinks" class="platform-links" aria-label="Искать на других площадках"></div>
+<div class="vk-profile-box">
+ <strong>Музыка из открытого профиля VK</strong>
+ <input id="vkProfileUrl" type="url" inputmode="url" placeholder="Вставь ссылку на профиль VK">
+ <button type="button" id="vkProfileBtn">Открыть музыку профиля</button>
+ <div class="source-note">VK не разрешает этому сайту свободно получать аудиозаписи любого профиля по одной ссылке. Кнопка откроет страницу музыки профиля в VK; закрытые и недоступные записи не появятся в YURTISH MUSIC.</div>
+</div>
 </section>
 
 <section id="mine">
@@ -364,7 +372,7 @@ async function loadPopular(){
  setStatus("Загружаем популярные треки...");
  try{
   const data=await api(`/tracks/trending?limit=30&app_name=${APP}`);
-  tracks=data.map(normalize);
+  tracks=data.map(normalize).filter(isRussianTrack);
   renderList("popularList",tracks);
   setStatus("Популярные треки загружены");
  }catch(error){
@@ -641,6 +649,39 @@ loadPopular();
   }
   throw new Error("Не удалось связаться с Audius: "+(lastError?.message||"проверь интернет"));
  }
+ function isRussianTrack(track){
+  const title=String(track.title||"");
+  const artist=String(track.user?.name||track.artist||"");
+  return /[А-Яа-яЁё]/.test(title+" "+artist);
+ }
+ function platformSearchLinks(query){
+  const box=document.getElementById("platformSearchLinks");
+  if(!box)return;
+  box.replaceChildren();
+  const q=encodeURIComponent(query);
+  const links=[
+   ["VK Музыка","https://vk.com/audio?q="+q],
+   ["YouTube","https://www.youtube.com/results?search_query="+q],
+   ["Яндекс Музыка","https://music.yandex.ru/search?text="+q],
+   ["Spotify","https://open.spotify.com/search/"+q],
+   ["SoundCloud","https://soundcloud.com/search/sounds?q="+q]
+  ];
+  links.forEach(([label,url])=>{
+   const a=document.createElement("a");a.href=url;a.target="_blank";a.rel="noopener noreferrer";a.textContent=label;box.append(a);
+  });
+ }
+ const vkButton=document.getElementById("vkProfileBtn");
+ if(vkButton)vkButton.addEventListener("click",()=>{
+  const value=document.getElementById("vkProfileUrl")?.value.trim()||"";
+  let url;
+  try{url=new URL(value);}catch(_){say("Вставь полную ссылку на открытый профиль VK.");return;}
+  if(!/(^|\\.)vk\\.(com|ru)$/i.test(url.hostname)){say("Нужна ссылка именно на vk.com или vk.ru.");return;}
+  const path=url.pathname.replace(/\\/$/,"");
+  if(!path || path==="/audio"){say("Вставь ссылку на профиль, а не на главную страницу VK.");return;}
+  const audioUrl="https://vk.com/audio?owner_id="+encodeURIComponent(path);
+  window.open(audioUrl,"_blank","noopener");
+  say("Открываю музыкальный раздел VK. Доступность записей зависит от настроек профиля и VK.");
+ });
  function normalizeGenreTrack(track){
   return {id:String(track.id),title:track.title||"Без названия",artist:track.user?.name||"Неизвестный исполнитель",artwork:track.artwork?.["150x150"]||"",source:"audius",raw:track};
  }
@@ -703,7 +744,7 @@ loadPopular();
    if(!Array.isArray(data))throw new Error("Audius вернул не список треков");
    for(let i=0;i<data.length;i++){
     const track=data[i];
-    if((!genre||isGenre(track,genre))&&canStream(track))filtered.push(normalizeGenreTrack(track));
+    if((!genre||isGenre(track,genre))&&canStream(track)&&isRussianTrack(track))filtered.push(normalizeGenreTrack(track));
    }
    renderTracksSafe("russianList",filtered);
    say(filtered.length?"Найдено "+filtered.length+" полных треков жанра "+label+".":"В подборке Audius пока нет доступных полных треков этого жанра.");
@@ -716,18 +757,19 @@ loadPopular();
   const query=document.getElementById("searchInput")?.value.trim()||"";
   const box=document.getElementById("searchList");
   if(!query){say("Введи название трека или исполнителя.");return;}
-  box.textContent="Ищем полные треки...";
-  say("Ищем в Audius: "+query);
+  platformSearchLinks(query);
+  box.textContent="Ищем русскоязычные полные треки в Audius...";
+  say("Ищем русскоязычные треки в Audius и показываем поиск на других площадках: "+query);
   try{
    const data=await fetchTracks("/tracks/search?query="+encodeURIComponent(query)+"&limit=50&app_name="+app);
    const filtered=[];
    if(!Array.isArray(data))throw new Error("Audius вернул не список треков");
    for(let i=0;i<data.length;i++){
     const track=data[i];
-    if(canStream(track))filtered.push(normalizeGenreTrack(track));
+    if(canStream(track)&&isRussianTrack(track))filtered.push(normalizeGenreTrack(track));
    }
    renderTracksSafe("searchList",filtered);
-   say(filtered.length?"Найдено "+filtered.length+" полных доступных треков.":"Полные треки по запросу не найдены.");
+   say(filtered.length?"Найдено "+filtered.length+" русскоязычных полных треков Audius. Для других площадок используй кнопки выше.":"В Audius русскоязычные полные треки не найдены. Проверь кнопки поиска на других площадках выше.");
   }catch(error){
    box.textContent="Поиск временно недоступен.";
    say("Ошибка поиска Audius: "+error.message);
