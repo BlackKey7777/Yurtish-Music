@@ -676,10 +676,10 @@ loadPopular();
   const value=document.getElementById("vkProfileUrl")?.value.trim()||"";
   let profile;
   try{profile=new URL(value);}catch(_){say("Вставь полную ссылку на профиль VK, например https://vk.com/id123");return;}
-  if(!/(^|\\.)vk\\.(com|ru)$/i.test(profile.hostname)){say("Нужна ссылка именно на vk.com или vk.ru.");return;}
-  const path=profile.pathname.replace(/\\/$/,"");
+  if(!/(^|\.)vk\.(com|ru)$/i.test(profile.hostname)){say("Нужна ссылка именно на vk.com или vk.ru.");return;}
+  const path=profile.pathname.replace(/\/$/,"");
   if(!path||path==="/"||path.toLowerCase()==="/audio"){say("Вставь ссылку на конкретный профиль VK.");return;}
-  const numeric=path.match(/^\\/id(\\d+)$/i);
+  const numeric=path.match(/^\/id(\d+)$/i);
   const target=numeric?"https://vk.com/audios"+numeric[1]:"https://vk.com"+path+"?section=audio";
   let link=document.getElementById("vkProfileOpenLink");
   if(!link){
