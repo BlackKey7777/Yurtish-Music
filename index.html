@@ -214,3 +214,347 @@ load("/tracks/trending?limit=30&app_name="+APP,"Популярные треки"
 </body>
 </html>
 
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#101014">
+<title>YURTISH MUSIC</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#101014;color:#fff;font-family:Arial,sans-serif}
+header{padding:22px 18px 12px}
+h1{margin:0;font-size:27px;letter-spacing:2px}
+h1 span{color:#a855f7}
+.subtitle{color:#888;font-size:12px;margin-top:5px}
+nav{display:flex;gap:8px;overflow-x:auto;padding:12px 15px}
+nav button,.chip{background:#24232b;color:#ddd;border:0;border-radius:20px;padding:10px 15px;white-space:nowrap}
+nav button.active,.chip.active{background:#9333ea;color:white}
+main{padding:8px 16px 150px}
+h2{font-size:20px;margin:18px 0 12px}
+.search{display:flex;gap:8px;margin:12px 0}
+input[type=search]{min-width:0;flex:1;background:#24232b;border:1px solid #393641;border-radius:12px;padding:14px;color:white;font-size:15px}
+button{cursor:pointer}
+.action{background:#9333ea;color:white;border:0;border-radius:12px;padding:12px 15px}
+.track{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #292830}
+.cover{width:48px;height:48px;border-radius:10px;background:linear-gradient(135deg,#9333ea,#252039);display:grid;place-items:center;font-size:20px;flex-shrink:0}
+.info{flex:1;min-width:0}
+.info strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
+.info small{color:#999;display:block;margin-top:5px}
+.track button{background:#292632;border:0;color:white;border-radius:10px;padding:9px 11px}
+.empty{color:#888;text-align:center;padding:35px 10px}
+#player{position:fixed;bottom:0;left:0;right:0;background:#1b1922;border-top:1px solid #393340;padding:13px 16px calc(13px + env(safe-area-inset-bottom));z-index:5}
+.player-top{display:flex;align-items:center;gap:12px}
+#nowTitle{font-size:13px;font-weight:bold;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#playBtn{background:#9333ea;color:white;border:0;border-radius:50%;width:43px;height:43px;font-size:18px}
+#progress{width:100%;margin-top:10px;accent-color:#a855f7}
+#status{font-size:11px;color:#aaa;margin-top:7px}
+.upload{display:block;background:#24232b;border:1px dashed #7c3aed;padding:17px;border-radius:14px;text-align:center;margin:15px 0;color:#ddd}
+.upload input{display:none}
+.hint{color:#888;font-size:12px;line-height:1.5}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px}
+</style>
+</head>
+<body>
+<header>
+<h1>YURTISH <span>MUSIC</span></h1>
+<div class="subtitle">ТВОЯ МУЗЫКА. ТВОИ ПРАВИЛА.</div>
+</header>
+
+<nav>
+<button class="active" data-tab="popular">Популярное</button>
+<button data-tab="russian">Русская музыка</button>
+<button data-tab="search">Поиск</button>
+<button data-tab="mine">Мои треки</button>
+<button data-tab="favorites">Избранное</button>
+</nav>
+
+<main>
+<section id="popular">
+<h2>Популярное</h2>
+<div id="popularList"></div>
+</section>
+
+<section id="russian" hidden>
+<h2>Русская музыка</h2>
+<div class="chips">
+<button class="chip" data-query="русский рэп">Русский рэп</button>
+<button class="chip" data-query="русский рок">Русский рок</button>
+<button class="chip" data-query="русская поп музыка">Поп</button>
+<button class="chip" data-query="russian music">Russian music</button>
+</div>
+<div id="russianList"></div>
+</section>
+
+<section id="search" hidden>
+<h2>Поиск музыки</h2>
+<div class="search">
+<input id="searchInput" type="search" placeholder="Название или исполнитель...">
+<button class="action" id="searchBtn">Найти</button>
+</div>
+<div id="searchList"></div>
+</section>
+
+<section id="mine" hidden>
+<h2>Мои треки</h2>
+<label class="upload">
+＋ Добавить музыку с телефона
+<input id="fileInput" type="file" accept="audio/*" multiple>
+</label>
+<p class="hint">Выбранные файлы доступны в этом открытом приложении на твоём устройстве. Они не загружаются в общий каталог и не появляются у других пользователей.</p>
+<div id="mineList"></div>
+</section>
+
+<section id="favorites" hidden>
+<h2>Избранное ♥</h2>
+<div id="favoriteList"></div>
+</section>
+</main>
+
+<div id="player">
+<div class="player-top">
+<div class="cover">♫</div>
+<div id="nowTitle">Выбери трек</div>
+<button id="playBtn">▶</button>
+</div>
+<input id="progress" type="range" min="0" max="100" value="0">
+<div id="status">YURTISH MUSIC готов к работе</div>
+<audio id="audio"></audio>
+</div>
+
+<script>
+const API = "https://discoveryprovider.audius.co/v1";
+const APP = "YurtishMusic";
+const audio = document.getElementById("audio");
+
+let tracks = [];
+let myTracks = [];
+let currentTrack = null;
+let favorites = JSON.parse(localStorage.getItem("yurtish_favorites") || "[]");
+
+function setStatus(message){
+ document.getElementById("status").textContent = message;
+}
+
+function saveFavorites(){
+ localStorage.setItem("yurtish_favorites", JSON.stringify(favorites));
+}
+
+async function api(path){
+ const response = await fetch(API + path);
+ if(!response.ok) throw new Error("Ошибка музыкального сервиса");
+ const json = await response.json();
+ return json.data || [];
+}
+
+function normalize(track){
+ return {
+  id:String(track.id),
+  title:track.title || "Без названия",
+  artist:track.user?.name || "Неизвестный исполнитель",
+  artwork:track.artwork?.["150x150"] || "",
+  source:"audius",
+  raw:track
+ };
+}
+
+function isFavorite(track){
+ return favorites.some(item=>item.id===track.id && item.source===track.source);
+}
+
+function toggleFavorite(track){
+ if(isFavorite(track)){
+  favorites=favorites.filter(item=>!(item.id===track.id && item.source===track.source));
+ }else{
+  favorites.push({id:track.id,title:track.title,artist:track.artist,source:track.source});
+ }
+ saveFavorites();
+ renderFavorites();
+}
+
+function createTrackElement(track){
+ const row=document.createElement("div");
+ row.className="track";
+
+ const cover=document.createElement("div");
+ cover.className="cover";
+ cover.textContent="♫";
+ if(track.artwork){
+  cover.style.backgroundImage=`url("${track.artwork}")`;
+  cover.style.backgroundSize="cover";
+ }
+
+ const info=document.createElement("div");
+ info.className="info";
+ const title=document.createElement("strong");
+ title.textContent=track.title;
+ const artist=document.createElement("small");
+ artist.textContent=track.artist;
+ info.append(title,artist);
+
+ const play=document.createElement("button");
+ play.textContent="▶";
+ play.addEventListener("click",()=>playTrack(track));
+
+ const like=document.createElement("button");
+ like.textContent=isFavorite(track)?"♥":"♡";
+ like.addEventListener("click",()=>toggleFavorite(track));
+
+ row.append(cover,info,play,like);
+ return row;
+}
+
+function renderList(containerId,list){
+ const container=document.getElementById(containerId);
+ container.replaceChildren();
+ if(!list.length){
+  const empty=document.createElement("div");
+  empty.className="empty";
+  empty.textContent="Здесь пока ничего нет";
+  container.append(empty);
+  return;
+ }
+ list.forEach(track=>container.append(createTrackElement(track)));
+}
+
+async function loadPopular(){
+ setStatus("Загружаем популярные треки...");
+ try{
+  const data=await api(`/tracks/trending?limit=30&app_name=${APP}`);
+  tracks=data.map(normalize);
+  renderList("popularList",tracks);
+  setStatus("Популярные треки загружены");
+ }catch(error){
+  setStatus("Не удалось загрузить каталог. Попробуй позже.");
+ }
+}
+
+async function searchMusic(query,target="searchList"){
+ if(!query.trim()) return;
+ setStatus("Ищем музыку...");
+ const container=document.getElementById(target);
+ container.replaceChildren();
+ try{
+  const data=await api(`/tracks/search?query=${encodeURIComponent(query)}&limit=30&app_name=${APP}`);
+  const results=data.map(normalize);
+  renderList(target,results);
+  setStatus(results.length?"Результаты поиска загружены":"Ничего не найдено");
+ }catch(error){
+  setStatus("Поиск временно недоступен");
+ }
+}
+
+async function playTrack(track){
+ currentTrack=track;
+ document.getElementById("nowTitle").textContent=track.title+" — "+track.artist;
+ setStatus("Подключаем трек...");
+
+ try{
+  if(track.source==="local"){
+   audio.src=track.url;
+  }else{
+   audio.src=`${API}/tracks/${encodeURIComponent(track.id)}/stream?app_name=${APP}`;
+  }
+  await audio.play();
+  document.getElementById("playBtn").textContent="Ⅱ";
+  setStatus("Сейчас играет");
+ }catch(error){
+  setStatus("Не удалось включить трек. Возможно, источник недоступен.");
+  document.getElementById("playBtn").textContent="▶";
+ }
+}
+
+document.getElementById("playBtn").addEventListener("click",async()=>{
+ if(!currentTrack){
+  setStatus("Сначала выбери трек");
+  return;
+ }
+ if(audio.paused){
+  try{
+   await audio.play();
+   document.getElementById("playBtn").textContent="Ⅱ";
+  }catch(error){
+   setStatus("Не удалось продолжить воспроизведение");
+  }
+ }else{
+  audio.pause();
+  document.getElementById("playBtn").textContent="▶";
+ }
+});
+
+audio.addEventListener("ended",()=>{
+ document.getElementById("playBtn").textContent="▶";
+ setStatus("Трек завершён");
+});
+audio.addEventListener("error",()=>{
+ document.getElementById("playBtn").textContent="▶";
+ setStatus("Ошибка воспроизведения. Попробуй другой трек.");
+});
+audio.addEventListener("timeupdate",()=>{
+ if(audio.duration){
+  document.getElementById("progress").value=(audio.currentTime/audio.duration)*100;
+ }
+});
+document.getElementById("progress").addEventListener("input",event=>{
+ if(audio.duration) audio.currentTime=(event.target.value/100)*audio.duration;
+});
+
+document.getElementById("searchBtn").addEventListener("click",()=>{
+ searchMusic(document.getElementById("searchInput").value);
+});
+document.getElementById("searchInput").addEventListener("keydown",event=>{
+ if(event.key==="Enter") searchMusic(event.target.value);
+});
+
+document.querySelectorAll("[data-query]").forEach(button=>{
+ button.addEventListener("click",()=>{
+  searchMusic(button.dataset.query,"russianList");
+ });
+});
+
+document.getElementById("fileInput").addEventListener("change",event=>{
+ const files=Array.from(event.target.files || []);
+ files.forEach(file=>{
+  if(!file.type.startsWith("audio/")) return;
+  const track={
+   id:"local-"+Date.now()+"-"+Math.random(),
+   title:file.name.replace(/\.[^/.]+$/,""),
+   artist:"Мой файл",
+   source:"local",
+   url:URL.createObjectURL(file)
+  };
+  myTracks.push(track);
+ });
+ renderList("mineList",myTracks);
+ setStatus(files.length?"Файлы добавлены":"Аудиофайлы не выбраны");
+ event.target.value="";
+});
+
+function renderFavorites(){
+ const list=favorites.map(item=>{
+  if(item.source==="local"){
+   return myTracks.find(track=>track.id===item.id);
+  }
+  return tracks.find(track=>track.id===item.id) || {
+   ...item,source:"audius"
+  };
+ }).filter(Boolean);
+ renderList("favoriteList",list);
+}
+
+document.querySelectorAll("nav button").forEach(button=>{
+ button.addEventListener("click",()=>{
+  document.querySelectorAll("nav button").forEach(item=>item.classList.remove("active"));
+  button.classList.add("active");
+  document.querySelectorAll("main section").forEach(section=>section.hidden=true);
+  document.getElementById(button.dataset.tab).hidden=false;
+  if(button.dataset.tab==="favorites") renderFavorites();
+ });
+});
+
+loadPopular();
+</script>
+</body>
+</html>
+
