@@ -381,6 +381,7 @@ function isRussianCatalogTrack(track){
  const text=title+" "+artist;
  return /[а-яё]/i.test(text)||RUSSIAN_ARTISTS_2026.some(name=>artist.includes(name));
 }
+window.isRussianCatalogTrack=isRussianCatalogTrack;
 function trackYear(track){
  const raw=track.release_date||track.releaseDate||track.created_at||track.createdAt||"";
  if(!raw)return 0;
@@ -756,7 +757,7 @@ loadNew2026();
     if(!Array.isArray(batch))continue;
     for(const track of batch){
      const key=String(track.id);
-     if(!key||seen.has(key)||!canStream(track)||!isRussianCatalogTrack(track))continue;
+     if(!key||seen.has(key)||!canStream(track)||!(window.isRussianCatalogTrack&&window.isRussianCatalogTrack(track)))continue;
      const normalized=normalizeGenreTrack(track);
      const nameKey=(normalized.title+"|"+normalized.artist).toLocaleLowerCase().replace(/\s+/g," ").trim();
      if(seenNames.has(nameKey))continue;
