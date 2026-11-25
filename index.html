@@ -32,7 +32,7 @@ button{cursor:pointer}
 #player{position:fixed;bottom:58px;left:0;right:0;background:#1b1922;border-top:1px solid #393340;padding:9px 16px;z-index:20;pointer-events:auto}
 .player-top{display:flex;align-items:center;gap:12px}
 #nowTitle{font-size:13px;font-weight:bold;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#playBtn{background:#9333ea;color:white;border:0;border-radius:50%;width:43px;height:43px;font-size:18px}
+#playBtn{background:#9333ea;color:white;border:0;border-radius:50%;width:43px;height:43px;font-size:18px;flex-shrink:0}.player-controls{display:flex;align-items:center;gap:10px}.skipBtn{background:#302c39;color:#fff;border:0;border-radius:50%;width:36px;height:36px;font-size:17px;flex-shrink:0}
 #progress{width:100%;margin-top:10px;accent-color:#a855f7}
 #status{font-size:11px;color:#aaa;margin-top:7px}
 .upload{display:block;background:#24232b;border:1px dashed #7c3aed;padding:17px;border-radius:14px;text-align:center;margin:15px 0;color:#ddd}
@@ -101,7 +101,7 @@ button{cursor:pointer}
 <div class="player-top">
 <div class="cover">♫</div>
 <div id="nowTitle">Выбери трек</div>
-<button id="playBtn">▶</button>
+<div class="player-controls"><button class="skipBtn" id="prevBtn" aria-label="Предыдущий трек">⏮</button><button id="playBtn" aria-label="Пауза или воспроизведение">▶</button><button class="skipBtn" id="nextBtn" aria-label="Следующий трек">⏭</button></div>
 </div>
 <input id="progress" type="range" min="0" max="100" value="0">
 <div id="status">YURTISH MUSIC готов к работе</div>
@@ -116,6 +116,8 @@ const audio = document.getElementById("audio");
 let tracks = [];
 let myTracks = [];
 let currentTrack = null;
+let currentQueue = [];
+let currentIndex = -1;
 let favorites = JSON.parse(localStorage.getItem("yurtish_favorites") || "[]");
 
 function setStatus(message){
@@ -158,7 +160,7 @@ function toggleFavorite(track){
  renderFavorites();
 }
 
-function createTrackElement(track){
+function createTrackElement(track,queue=[]){
  const row=document.createElement("div");
  row.className="track";
 
@@ -180,7 +182,7 @@ function createTrackElement(track){
 
  const play=document.createElement("button");
  play.textContent="▶";
- play.addEventListener("click",()=>playTrack(track));
+ play.addEventListener("click",()=>playTrack(track,queue));
 
  const like=document.createElement("button");
  like.textContent=isFavorite(track)?"♥":"♡";
@@ -200,7 +202,7 @@ function renderList(containerId,list){
   container.append(empty);
   return;
  }
- list.forEach(track=>container.append(createTrackElement(track)));
+ list.forEach(track=>container.append(createTrackElement(track,list)));
 }
 
 async function loadPopular(){
@@ -230,7 +232,10 @@ async function searchMusic(query,target="searchList"){
  }
 }
 
-async function playTrack(track){
+async function playTrack(track,queue=currentQueue){
+ currentQueue=queue && queue.length ? queue : [track];
+ currentIndex=currentQueue.findIndex(item=>item.id===track.id && item.source===track.source);
+ if(currentIndex<0){currentQueue=[track];currentIndex=0;}
  currentTrack=track;
  document.getElementById("nowTitle").textContent=track.title+" — "+track.artist;
  setStatus("Подключаем трек...");
@@ -249,6 +254,15 @@ async function playTrack(track){
   document.getElementById("playBtn").textContent="▶";
  }
 }
+
+async function skipTrack(direction){
+ if(!currentQueue.length || currentIndex<0){setStatus("Сначала выбери трек");return;}
+ const nextIndex=currentIndex+direction;
+ if(nextIndex<0 || nextIndex>=currentQueue.length){setStatus(direction>0?"Это последний трек":"Это первый трек");return;}
+ await playTrack(currentQueue[nextIndex],currentQueue);
+}
+document.getElementById("prevBtn").addEventListener("click",()=>skipTrack(-1));
+document.getElementById("nextBtn").addEventListener("click",()=>skipTrack(1));
 
 document.getElementById("playBtn").addEventListener("click",async()=>{
  if(!currentTrack){
@@ -269,9 +283,11 @@ document.getElementById("playBtn").addEventListener("click",async()=>{
 });
 
 audio.addEventListener("ended",()=>{
- document.getElementById("playBtn").textContent="▶";
- setStatus("Трек завершён");
+ if(currentIndex>=0 && currentIndex<currentQueue.length-1){skipTrack(1);}
+ else {document.getElementById("playBtn").textContent="▶";setStatus("Плейлист завершён");}
 });
+audio.addEventListener("play",()=>{document.getElementById("playBtn").textContent="Ⅱ";});
+audio.addEventListener("pause",()=>{document.getElementById("playBtn").textContent="▶";});
 audio.addEventListener("error",()=>{
  document.getElementById("playBtn").textContent="▶";
  setStatus("Ошибка воспроизведения. Попробуй другой трек.");
