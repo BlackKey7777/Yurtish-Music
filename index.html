@@ -29,13 +29,13 @@ button{cursor:pointer}
 .info small{color:#999;display:block;margin-top:5px}
 .track button{background:#292632;border:0;color:white;border-radius:10px;padding:9px 11px}
 .track .favoriteBtn{min-width:40px;min-height:40px;font-size:22px;line-height:1;color:#aaa;background:#292632;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
-.track .favoriteBtn.is-favorite{color:#a855f7;background:#30223f}
+.track .favoriteBtn.is-favorite{color:#ef4444;background:#3b2026}.track .favoriteBtn{color:#ef4444}
 .empty{color:#888;text-align:center;padding:35px 10px}
 #player{position:fixed;bottom:0;left:0;right:0;background:#1b1922;border-top:1px solid #393340;padding:12px 16px calc(12px + env(safe-area-inset-bottom));z-index:20;pointer-events:auto}
 .player-top{display:flex;align-items:center;gap:12px}
 #nowTitle{font-size:13px;font-weight:bold;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #playBtn{background:#9333ea;color:white;border:0;border-radius:50%;width:43px;height:43px;font-size:18px;flex-shrink:0}.player-controls{display:flex;align-items:center;gap:10px}.skipBtn{background:#302c39;color:#fff;border:0;border-radius:50%;width:36px;height:36px;font-size:17px;flex-shrink:0}
-#progress{width:100%;margin-top:10px;accent-color:#a855f7}
+.progress-row{display:flex;align-items:center;gap:10px;margin-top:8px}#progress{width:100%;min-width:0;margin:0;accent-color:#ef4444;touch-action:pan-y}#timeLabel{font-size:10px;color:#aaa;white-space:nowrap;font-variant-numeric:tabular-nums}
 #status{font-size:11px;color:#aaa;margin-top:7px}
 .upload{display:block;background:#24232b;border:1px dashed #7c3aed;padding:17px;border-radius:14px;text-align:center;margin:15px 0;color:#ddd}
 .upload input{display:none}
@@ -111,7 +111,7 @@ button{cursor:pointer}
 <div id="nowTitle">Выбери трек</div>
 <div class="player-controls"><button class="skipBtn" id="prevBtn" aria-label="Предыдущий трек">⏮</button><button id="playBtn" aria-label="Пауза или воспроизведение">▶</button><button class="skipBtn" id="nextBtn" aria-label="Следующий трек">⏭</button></div>
 </div>
-<input id="progress" type="range" min="0" max="100" value="0">
+<div class="progress-row"><input id="progress" type="range" min="0" max="0" step="0.1" value="0" aria-label="Перемотка трека"><span id="timeLabel">0:00 / 0:00</span></div>
 <div id="status">YURTISH MUSIC готов к работе</div>
 <audio id="audio"></audio>
 </div>
@@ -468,14 +468,30 @@ audio.addEventListener("error",()=>{
  document.getElementById("playBtn").textContent="▶";
  setStatus("Ошибка воспроизведения. Попробуй другой трек.");
 });
-audio.addEventListener("timeupdate",()=>{
- if(audio.duration){
-  document.getElementById("progress").value=(audio.currentTime/audio.duration)*100;
+const progressBar=document.getElementById("progress");
+const timeLabel=document.getElementById("timeLabel");
+function formatTrackTime(seconds){
+ if(!Number.isFinite(seconds)||seconds<0)return "0:00";
+ return Math.floor(seconds/60)+":"+String(Math.floor(seconds%60)).padStart(2,"0");
+}
+function refreshProgress(){
+ const duration=Number.isFinite(audio.duration)?audio.duration:0;
+ if(duration>0){progressBar.max=String(duration);progressBar.value=String(Math.min(audio.currentTime,duration));}
+ else{progressBar.max="0";progressBar.value="0";}
+ timeLabel.textContent=formatTrackTime(audio.currentTime)+" / "+formatTrackTime(duration);
+}
+audio.addEventListener("loadedmetadata",refreshProgress);
+audio.addEventListener("durationchange",refreshProgress);
+audio.addEventListener("timeupdate",refreshProgress);
+audio.addEventListener("seeked",refreshProgress);
+function seekAudio(){
+ const target=Number(progressBar.value);
+ if(Number.isFinite(audio.duration)&&audio.duration>0&&Number.isFinite(target)){
+  try{audio.currentTime=Math.max(0,Math.min(target,audio.duration));}catch(error){}
  }
-});
-document.getElementById("progress").addEventListener("input",event=>{
- if(audio.duration) audio.currentTime=(event.target.value/100)*audio.duration;
-});
+}
+progressBar.addEventListener("input",seekAudio);
+progressBar.addEventListener("change",seekAudio);
 
 document.getElementById("searchBtn").addEventListener("click",()=>{
  searchMusic(document.getElementById("searchInput").value);
@@ -717,7 +733,7 @@ loadPopular();
         return (json.data || []).map(t => ({
           id:String(t.id), title:t.title || "Без названия",
           artist:t.artist && t.artist.name || "Неизвестный исполнитель",
-          cover:t.album && t.album.cover_medium || "", preview:t.preview || ""
+          cover:t.album && t.album.cover_medium || "", preview:t.preview || "", source:"deezer"
         }));
       }));
       const seen = new Set();
@@ -746,7 +762,23 @@ loadPopular();
           try{await audio.play();say("Сейчас играет фрагмент: "+track.title);}
           catch(e){say("Браузер не разрешил воспроизведение. Нажми ▶ ещё раз.");}
         });
-        row.append(cover,info,play);box.append(row);
+        const like=document.createElement("button");
+        like.type="button";like.className="favoriteBtn";
+        const saved=JSON.parse(localStorage.getItem("yurtish_favorites")||"[]");
+        const liked=saved.some(item=>String(item.id)===track.id&&item.source==="deezer");
+        if(liked)like.classList.add("is-favorite");
+        like.textContent=liked?"♥":"♡";
+        like.setAttribute("aria-label",liked?"Убрать из избранного":"Добавить в избранное");
+        like.addEventListener("click",event=>{
+          event.preventDefault();event.stopPropagation();
+          if(typeof window.toggleFavorite!=="function"){say("Избранное пока недоступно. Обнови страницу.");return;}
+          const wasLiked=like.classList.contains("is-favorite");
+          window.toggleFavorite(track);
+          like.classList.toggle("is-favorite",!wasLiked);
+          like.textContent=!wasLiked?"♥":"♡";
+          like.setAttribute("aria-label",!wasLiked?"Убрать из избранного":"Добавить в избранное");
+        });
+        row.append(cover,info,play,like);box.append(row);
       });
       say("Найдено треков: "+queue.length+".");
     } catch(error) {
