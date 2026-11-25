@@ -373,7 +373,7 @@ async function loadPopular(){
  setStatus("Загружаем популярные треки...");
  try{
   const data=await api(`/tracks/trending?limit=30&app_name=${APP}`);
-  tracks=data.map(normalize).filter(isRussianTrack);
+  tracks=data.map(normalize);
   renderList("popularList",tracks);
   setStatus("Популярные треки загружены");
  }catch(error){
@@ -389,7 +389,7 @@ async function searchMusic(query,target="searchList"){
  setStatus("Поиск в Audius: "+term);
  try{
   const data=await api("/tracks/search?query="+encodeURIComponent(term)+"&limit=50&app_name="+APP);
-  const results=data.filter(track=>track.is_streamable!==false && track.isStreamable!=="false").map(normalize);
+  const results=data.map(normalize);
   renderList(target,results);
   setStatus(results.length?"Найдено "+results.length+" треков. Воспроизведение — полная версия, если она доступна в Audius.":"Полные доступные треки не найдены.");
  }catch(error){
@@ -675,7 +675,7 @@ loadPopular();
  if(vkButton)vkButton.addEventListener("click",()=>{
   const value=document.getElementById("vkProfileUrl")?.value.trim()||"";
   let profile;
-  try{profile=new URL(value);}catch(_){say("Вставь полную ссылку на профиль VK, например https://vk.com/id123");return;}
+  try{const normalized=value.includes("://")?value:"https://"+value;profile=new URL(normalized);}catch(_){say("Вставь ссылку на профиль VK, например vk.com/id123");return;}
   if(!/(^|\.)vk\.(com|ru)$/i.test(profile.hostname)){say("Нужна ссылка именно на vk.com или vk.ru.");return;}
   const path=profile.pathname.replace(/\/$/,"");
   if(!path||path==="/"||path.toLowerCase()==="/audio"){say("Вставь ссылку на конкретный профиль VK.");return;}
@@ -725,7 +725,7 @@ loadPopular();
  }
  function canStream(t){
   const value=t.is_streamable!==undefined?t.is_streamable:t.isStreamable;
-  return value===true || value==="true" || value===1;
+  return value!==false && value!=="false" && value!==0;
  }
  function isGenre(t,genre){
   const actual=String(t.genre||"").trim().toLowerCase();
@@ -768,8 +768,8 @@ loadPopular();
   const box=document.getElementById("searchList");
   if(!query){say("Введи название трека или исполнителя.");return;}
   platformSearchLinks(query);
-  box.textContent="Ищем русскоязычные полные треки в Audius...";
-  say("Ищем русскоязычные треки в Audius и показываем поиск на других площадках: "+query);
+  box.textContent="Ищем треки в каталоге Audius...";
+  say("Ищем треки в Audius и показываем поиск на других площадках: "+query);
   try{
    const data=await fetchTracks("/tracks/search?query="+encodeURIComponent(query)+"&limit=50&app_name="+app);
    const filtered=[];
@@ -779,7 +779,7 @@ loadPopular();
     if(canStream(track))filtered.push(normalizeGenreTrack(track));
    }
    renderTracksSafe("searchList",filtered);
-   say(filtered.length?"Найдено "+filtered.length+" русскоязычных полных треков Audius. Для других площадок используй кнопки выше.":"В Audius русскоязычные полные треки не найдены. Проверь кнопки поиска на других площадках выше.");
+   say(filtered.length?"Найдено "+filtered.length+" треков Audius. Для других площадок используй кнопки выше.":"В каталоге Audius по этому запросу ничего нет. Проверь кнопки поиска на других площадках выше.");
   }catch(error){
    box.textContent="Поиск временно недоступен.";
    say("Ошибка поиска Audius: "+error.message);
