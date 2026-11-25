@@ -12,8 +12,9 @@ header{padding:22px 18px 12px}
 h1{margin:0;font-size:27px;letter-spacing:2px}
 h1 span{color:#a855f7}
 .subtitle{color:#888;font-size:12px;margin-top:5px}
-nav{display:flex;gap:8px;overflow-x:auto;padding:12px 15px}
-nav button,.chip{background:#24232b;color:#ddd;border:0;border-radius:20px;padding:10px 15px;white-space:nowrap}
+nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;padding:10px 10px;position:relative;z-index:10;pointer-events:auto}
+nav button{background:#24232b;color:#ddd;border:0;border-radius:12px;padding:10px 2px;white-space:normal;min-width:0;width:100%;min-height:42px;font-size:10px;line-height:1.15;touch-action:manipulation;pointer-events:auto}
+.chip{background:#24232b;color:#ddd;border:0;border-radius:20px;padding:10px 15px;white-space:nowrap}
 nav button.active,.chip.active{background:#9333ea;color:white}
 main{padding:8px 16px 150px}
 h2{font-size:20px;margin:18px 0 12px}
@@ -48,7 +49,7 @@ button{cursor:pointer}
 
 <nav>
 <button class="active" data-tab="popular">Популярное</button>
-<button data-tab="russian">Русская музыка</button>
+<button data-tab="russian">Русская</button>
 <button data-tab="search">Поиск</button>
 <button data-tab="mine">Мои треки</button>
 <button data-tab="favorites">Избранное</button>
