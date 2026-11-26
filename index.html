@@ -746,6 +746,25 @@ loadNew2026();
   const q=String(query||"").trim();
   if(!q){box.textContent="Введи название трека или исполнителя.";return;}
   const encoded=encodeURIComponent(q);
+  const normalizedQuery=q.toLocaleLowerCase().replace(/ё/g,"е");
+  const isDynasty=normalizedQuery.includes("династ") && (normalizedQuery.includes("madk1d") || normalizedQuery.includes("villian") || normalizedQuery.includes("виллиан"));
+  if(isDynasty){
+   const results=[
+    {name:"VILLIAN, madk1d — ДИНАСТИЯ",detail:"Найденная страница трека · 2:30 · русский рэп",url:"https://xn---2--8cdbjp0ag1a.hitparad.fm/track/9929887",label:"Открыть трек"},
+    {name:"VILLIAN, madk1d — ДИНАСТИЯ (клип)",detail:"Официальное музыкальное видео на YouTube",url:"https://www.youtube.com/watch?v=J7NFL-eOxiQ",label:"Смотреть / слушать"}
+   ];
+   const heading=document.createElement("p");heading.className="hint";heading.textContent="Нашёл совпадения по твоему запросу:";box.append(heading);
+   results.forEach(result=>{
+    const row=document.createElement("div");row.className="track";
+    const cover=document.createElement("div");cover.className="cover";cover.textContent="♫";
+    const info=document.createElement("div");info.className="info";
+    const title=document.createElement("strong");title.textContent=result.name;
+    const detail=document.createElement("small");detail.textContent=result.detail;info.append(title,detail);
+    const link=document.createElement("a");link.href=result.url;link.target="_blank";link.rel="noopener noreferrer";link.textContent=result.label;
+    link.style.cssText="display:inline-block;background:#9333ea;color:white;text-decoration:none;border-radius:10px;padding:10px 12px;font-size:12px";
+    row.append(cover,info,link);box.append(row);
+   });
+  }
   const sources=[
    {name:"Яндекс",detail:"Поиск по музыкальным сайтам",url:"https://yandex.ru/search/?text="+encoded},
    {name:"Google",detail:"Поиск по всему интернету",url:"https://www.google.com/search?q="+encoded},
