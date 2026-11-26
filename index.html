@@ -784,7 +784,7 @@ loadNew2026();
    if(!Array.isArray(data))throw new Error("Audius вернул не список треков");
    for(let i=0;i<data.length;i++){
     const track=data[i];
-    if(!canStream(track)||!isRussianCatalogTrack(track))continue;
+    if(!canStream(track)||!(window.isRussianCatalogTrack&&window.isRussianCatalogTrack(track)))continue;
     const normalized=normalizeGenreTrack(track);
     const id=String(normalized.id);
     const nameKey=(normalized.title+"|"+normalized.artist).toLocaleLowerCase().replace(/\s+/g," ").trim();
