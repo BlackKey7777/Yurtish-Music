@@ -41,6 +41,7 @@ button{cursor:pointer}
 .upload input{display:none}
 .hint{color:#888;font-size:12px;line-height:1.5}
 .chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px}
+.track a{flex-shrink:0} .track .info{min-width:0}
 
 </style>
 </head>
@@ -737,66 +738,49 @@ loadNew2026();
   const actual=String(t.genre||"").trim().toLowerCase();
   return actual===genre.toLowerCase();
  }
+
+ function renderWebSearch(containerId,query){
+  const box=document.getElementById(containerId);
+  if(!box)return;
+  box.replaceChildren();
+  const q=String(query||"").trim();
+  if(!q){box.textContent="Введи название трека или исполнителя.";return;}
+  const encoded=encodeURIComponent(q);
+  const sources=[
+   {name:"Яндекс",detail:"Поиск по музыкальным сайтам",url:"https://yandex.ru/search/?text="+encoded},
+   {name:"Google",detail:"Поиск по всему интернету",url:"https://www.google.com/search?q="+encoded},
+   {name:"YouTube",detail:"Клипы и музыкальные публикации",url:"https://www.youtube.com/results?search_query="+encoded},
+   {name:"SoundCloud",detail:"Аудиотреки и миксы",url:"https://soundcloud.com/search/sounds?q="+encoded},
+   {name:"VK Видео",detail:"Музыкальные видео и записи",url:"https://vk.com/video?q="+encoded},
+   {name:"Apple Music",detail:"Каталог и страницы релизов",url:"https://music.apple.com/search?term="+encoded},
+   {name:"Zaycev.net",detail:"Поиск русских музыкальных публикаций",url:"https://www.google.com/search?q="+encodeURIComponent("site:zaycev.net "+q)}
+  ];
+  const note=document.createElement("p");
+  note.className="hint";
+  note.textContent="Поиск по нескольким площадкам. Нажми на источник, чтобы открыть результаты. Полное воспроизведение зависит от правил и возможностей самого сайта.";
+  box.append(note);
+  sources.forEach(source=>{
+   const row=document.createElement("div");row.className="track";
+   const cover=document.createElement("div");cover.className="cover";cover.textContent="↗";
+   const info=document.createElement("div");info.className="info";
+   const title=document.createElement("strong");title.textContent=source.name;
+   const detail=document.createElement("small");detail.textContent=source.detail;
+   info.append(title,detail);
+   const link=document.createElement("a");link.href=source.url;link.target="_blank";link.rel="noopener noreferrer";link.textContent="Искать";
+   link.style.cssText="display:inline-block;background:#9333ea;color:white;text-decoration:none;border-radius:10px;padding:10px 12px;font-size:12px";
+   row.append(cover,info,link);box.append(row);
+  });
+  say("Подготовлен поиск «"+q+"» по "+sources.length+" площадкам.");
+ }
  async function showGenre(button){
   const genre=button.getAttribute("data-genre")||"";
-  const label=button.textContent.trim();
-  const box=document.getElementById("russianList");
-  box.textContent="Ищем русскоязычные треки: "+label+"...";
-  say("Ищем подборку "+label+" по нескольким запросам...");
-  const queries=genre==="Hip-Hop/Rap"
-   ?["русский рэп","русский хип хоп","russian rap"]
-   :genre==="Rock"
-    ?["русский рок","русская рок музыка","russian rock"]
-    :genre==="Pop"
-     ?["русская поп музыка","русский поп","russian pop"]
-     :["русская музыка","русский рэп","русский рок","русский поп","russian music"];
-  try{
-   const batches=await Promise.all(queries.map(q=>fetchTracks("/tracks/search?query="+encodeURIComponent(q)+"&limit=50&app_name="+app).catch(()=>[])));
-   const seen=new Set(),seenNames=new Set(),filtered=[];
-   for(const batch of batches){
-    if(!Array.isArray(batch))continue;
-    for(const track of batch){
-     const key=String(track.id);
-     if(!key||seen.has(key)||!canStream(track)||!(window.isRussianCatalogTrack&&window.isRussianCatalogTrack(track)))continue;
-     const normalized=normalizeGenreTrack(track);
-     const nameKey=(normalized.title+"|"+normalized.artist).toLocaleLowerCase().replace(/\s+/g," ").trim();
-     if(seenNames.has(nameKey))continue;
-     seen.add(key);seenNames.add(nameKey);
-     filtered.push(normalized);
-    }
-   }
-   renderTracksSafe("russianList",filtered);
-   say(filtered.length?"Подобрано "+filtered.length+" треков по русским запросам («"+label+"»).":"По этим запросам Audius не вернул полные треки. Попробуй общий поиск или внешние площадки.");
-  }catch(error){
-   box.textContent="Не удалось загрузить подборку: "+error.message;
-   say("Ошибка подбора: "+error.message);
-  }
+  const query=genre==="Hip-Hop/Rap"?"русский рэп":genre==="Rock"?"русский рок":genre==="Pop"?"русский поп":"русская музыка";
+  renderWebSearch("russianList",query);
  }
  async function showSearch(){
   const query=document.getElementById("searchInput")?.value.trim()||"";
-  const box=document.getElementById("searchList");
   if(!query){say("Введи название трека или исполнителя.");return;}
-  box.textContent="Ищем треки в каталоге Audius...";
-  say("Ищем треки в каталоге Audius: "+query);
-  try{
-   const data=await fetchTracks("/tracks/search?query="+encodeURIComponent(query)+"&limit=50&app_name="+app);
-   const filtered=[],seenIds=new Set(),seenNames=new Set();
-   if(!Array.isArray(data))throw new Error("Audius вернул не список треков");
-   for(let i=0;i<data.length;i++){
-    const track=data[i];
-    if(!canStream(track)||!(window.isRussianCatalogTrack&&window.isRussianCatalogTrack(track)))continue;
-    const normalized=normalizeGenreTrack(track);
-    const id=String(normalized.id);
-    const nameKey=(normalized.title+"|"+normalized.artist).toLocaleLowerCase().replace(/\s+/g," ").trim();
-    if(seenIds.has(id)||seenNames.has(nameKey))continue;
-    seenIds.add(id);seenNames.add(nameKey);filtered.push(normalized);
-   }
-   renderTracksSafe("searchList",filtered);
-   say(filtered.length?"Найдено "+filtered.length+" уникальных треков.":"По этому запросу треков не найдено.");
-  }catch(error){
-   box.textContent="Поиск временно недоступен.";
-   say("Ошибка поиска Audius: "+error.message);
-  }
+  renderWebSearch("searchList",query);
  }
  document.addEventListener("click",event=>{
   const button=event.target.closest("button");
