@@ -76,10 +76,10 @@ button{cursor:pointer}
 <section id="russian">
 <h2>Русская музыка</h2>
 <div class="chips">
-<button class="chip" data-genre="Hip-Hop/Rap">Русский рэп</button>
-<button class="chip" data-genre="Rock">Русский рок</button>
-<button class="chip" data-genre="Pop">Русский поп</button>
-<button class="chip" data-genre="">Вся русская</button>
+<button class="chip" data-genre="Hip-Hop/Rap" data-queries="русский рэп">Русский рэп</button>
+<button class="chip" data-genre="Rock" data-queries="русский рок">Русский рок</button>
+<button class="chip" data-genre="Pop" data-queries="русский поп">Русский поп</button>
+<button class="chip" data-genre="" data-queries="русская музыка">Вся русская</button>
 </div>
 <div id="russianList"></div>
 </section>
@@ -668,156 +668,7 @@ loadNew2026();
 /* Старый обработчик Deezer удалён: поиск обслуживает Audius */
 </script>
 
-<script>
-/* Единственный обработчик поиска и жанров: только полные streamable-треки Audius */
-(function(){
- if(window.__yurtishAudiusOnlyV2)return;
- window.__yurtishAudiusOnlyV2=true;
- const status=document.getElementById("status");
- const say=m=>{if(status)status.textContent=m;};
- const base="https://discoveryprovider.audius.co/v1";
- const app="YurtishMusic";
- async function fetchTracks(path){
-  const hosts=["https://api.audius.co/v1",base];
-  let lastError=null;
-  for(const host of hosts){
-   try{
-    const response=await fetch(host+path,{method:"GET",mode:"cors",cache:"no-store",headers:{Accept:"application/json"}});
-    if(!response.ok)throw new Error(host.replace("https://","")+" вернул HTTP "+response.status);
-    const body=await response.json();
-    if(body&&Array.isArray(body.data))return body.data;
-    if(body&&body.data&&Array.isArray(body.data.tracks))return body.data.tracks;
-    if(Array.isArray(body))return body;
-    throw new Error("Audius вернул неожиданный формат данных");
-   }catch(error){lastError=error;}
-  }
-  throw new Error("Не удалось связаться с Audius: "+(lastError?.message||"проверь интернет"));
- }
- function isRussianTrack(track){
-  const title=String(track.title||"");
-  const artist=String(track.user?.name||track.artist||"");
-  return /[А-Яа-яЁё]/.test(title+" "+artist);
- }
 
- function normalizeGenreTrack(track){
-  return {id:String(track.id),title:track.title||"Без названия",artist:track.user?.name||"Неизвестный исполнитель",artwork:track.artwork?.["150x150"]||"",source:"audius",raw:track};
- }
- function renderTracksSafe(containerId,list){
-  if(typeof window.renderAudiusList==="function"){
-   window.renderAudiusList(containerId,list);
-   return;
-  }
-  const container=document.getElementById(containerId);
-  if(!container)throw new Error("Не найден список "+containerId);
-  container.replaceChildren();
-  if(!list.length){
-   const empty=document.createElement("div");empty.className="empty";empty.textContent="Здесь пока ничего нет";container.append(empty);return;
-  }
-  list.forEach(track=>{
-   const row=document.createElement("div");row.className="track";
-   const cover=document.createElement("div");cover.className="cover";cover.textContent="♫";
-   if(track.artwork){cover.style.backgroundImage='url("'+track.artwork+'")';cover.style.backgroundSize="cover";}
-   const info=document.createElement("div");info.className="info";
-   const title=document.createElement("strong");title.textContent=track.title;
-   const artist=document.createElement("small");artist.textContent=track.artist;info.append(title,artist);
-   const play=document.createElement("button");play.type="button";play.textContent="▶";play.setAttribute("aria-label","Включить "+track.title);
-   play.addEventListener("click",()=>{
-    if(typeof window.playTrack==="function")window.playTrack(track,list);
-    else{const audio=document.getElementById("audio");if(audio){audio.src="https://discoveryprovider.audius.co/v1/tracks/"+encodeURIComponent(track.id)+"/stream?app_name="+app;audio.play().catch(()=>say("Нажми ещё раз для запуска трека."));}}
-   });
-   const like=document.createElement("button");like.type="button";like.className="favoriteBtn";like.textContent="♡";like.setAttribute("aria-label","Добавить в избранное");
-   like.dataset.trackId=String(track.id);like.dataset.trackSource=track.source||"audius";like.classList.toggle("is-favorite",typeof window.isFavoriteTrack==="function"&&window.isFavoriteTrack(track));like.textContent=like.classList.contains("is-favorite")?"♥":"♡";like.addEventListener("click",event=>{event.preventDefault();event.stopPropagation();if(typeof window.toggleFavorite==="function"){window.toggleFavorite(track);const active=typeof window.isFavoriteTrack==="function"&&window.isFavoriteTrack(track);like.textContent=active?"♥":"♡";like.classList.toggle("is-favorite",!!active);like.setAttribute("aria-pressed",active?"true":"false");}});
-   row.append(cover,info,play,like);container.append(row);
-  });
- }
- function canStream(t){
-  const value=t.is_streamable!==undefined?t.is_streamable:t.isStreamable;
-  return value!==false && value!=="false" && value!==0;
- }
- function isGenre(t,genre){
-  const actual=String(t.genre||"").trim().toLowerCase();
-  return actual===genre.toLowerCase();
- }
-
- function renderWebSearch(containerId,query){
-  const box=document.getElementById(containerId);
-  if(!box)return;
-  box.replaceChildren();
-  const q=String(query||"").trim();
-  if(!q){box.textContent="Введи название трека или исполнителя.";return;}
-  const encoded=encodeURIComponent(q);
-  const normalizedQuery=q.toLocaleLowerCase().replace(/ё/g,"е");
-  const isDynasty=normalizedQuery.includes("династ") && (normalizedQuery.includes("madk1d") || normalizedQuery.includes("villian") || normalizedQuery.includes("виллиан"));
-  if(isDynasty){
-   const results=[
-    {name:"VILLIAN, madk1d — ДИНАСТИЯ",detail:"Найденная страница трека · 2:30 · русский рэп",url:"https://xn---2--8cdbjp0ag1a.hitparad.fm/track/9929887",label:"Открыть трек"},
-    {name:"VILLIAN, madk1d — ДИНАСТИЯ (клип)",detail:"Официальное музыкальное видео на YouTube",url:"https://www.youtube.com/watch?v=J7NFL-eOxiQ",label:"Смотреть / слушать"}
-   ];
-   const heading=document.createElement("p");heading.className="hint";heading.textContent="Нашёл совпадения по твоему запросу:";box.append(heading);
-   results.forEach(result=>{
-    const row=document.createElement("div");row.className="track";
-    const cover=document.createElement("div");cover.className="cover";cover.textContent="♫";
-    const info=document.createElement("div");info.className="info";
-    const title=document.createElement("strong");title.textContent=result.name;
-    const detail=document.createElement("small");detail.textContent=result.detail;info.append(title,detail);
-    const link=document.createElement("a");link.href=result.url;link.target="_blank";link.rel="noopener noreferrer";link.textContent=result.label;
-    link.style.cssText="display:inline-block;background:#9333ea;color:white;text-decoration:none;border-radius:10px;padding:10px 12px;font-size:12px";
-    row.append(cover,info,link);box.append(row);
-   });
-  }
-  const sources=[
-   {name:"Яндекс",detail:"Поиск по музыкальным сайтам",url:"https://yandex.ru/search/?text="+encoded},
-   {name:"Google",detail:"Поиск по всему интернету",url:"https://www.google.com/search?q="+encoded},
-   {name:"YouTube",detail:"Клипы и музыкальные публикации",url:"https://www.youtube.com/results?search_query="+encoded},
-   {name:"SoundCloud",detail:"Аудиотреки и миксы",url:"https://soundcloud.com/search/sounds?q="+encoded},
-   {name:"VK Видео",detail:"Музыкальные видео и записи",url:"https://vk.com/video?q="+encoded},
-   {name:"Apple Music",detail:"Каталог и страницы релизов",url:"https://music.apple.com/search?term="+encoded},
-   {name:"Zaycev.net",detail:"Поиск русских музыкальных публикаций",url:"https://www.google.com/search?q="+encodeURIComponent("site:zaycev.net "+q)}
-  ];
-  const note=document.createElement("p");
-  note.className="hint";
-  note.textContent="Поиск по нескольким площадкам. Нажми на источник, чтобы открыть результаты. Полное воспроизведение зависит от правил и возможностей самого сайта.";
-  box.append(note);
-  sources.forEach(source=>{
-   const row=document.createElement("div");row.className="track";
-   const cover=document.createElement("div");cover.className="cover";cover.textContent="↗";
-   const info=document.createElement("div");info.className="info";
-   const title=document.createElement("strong");title.textContent=source.name;
-   const detail=document.createElement("small");detail.textContent=source.detail;
-   info.append(title,detail);
-   const link=document.createElement("a");link.href=source.url;link.target="_blank";link.rel="noopener noreferrer";link.textContent="Искать";
-   link.style.cssText="display:inline-block;background:#9333ea;color:white;text-decoration:none;border-radius:10px;padding:10px 12px;font-size:12px";
-   row.append(cover,info,link);box.append(row);
-  });
-  say("Подготовлен поиск «"+q+"» по "+sources.length+" площадкам.");
- }
- async function showGenre(button){
-  const genre=button.getAttribute("data-genre")||"";
-  const query=genre==="Hip-Hop/Rap"?"русский рэп":genre==="Rock"?"русский рок":genre==="Pop"?"русский поп":"русская музыка";
-  renderWebSearch("russianList",query);
- }
- async function showSearch(){
-  const query=document.getElementById("searchInput")?.value.trim()||"";
-  if(!query){say("Введи название трека или исполнителя.");return;}
-  renderWebSearch("searchList",query);
- }
- document.addEventListener("click",event=>{
-  const button=event.target.closest("button");
-  if(!button)return;
-  if(button.id==="searchBtn"){
-   event.preventDefault();event.stopImmediatePropagation();showSearch();
-  }else if(button.hasAttribute("data-genre")){
-   event.preventDefault();event.stopImmediatePropagation();
-   document.querySelectorAll("[data-genre]").forEach(b=>b.classList.toggle("active",b===button));
-   showGenre(button);
-  }
- },true);
- const input=document.getElementById("searchInput");
- if(input)input.addEventListener("keydown",event=>{
-  if(event.key==="Enter"){event.preventDefault();document.getElementById("searchBtn")?.click();}
- });
-})();
-</script>
 
 </body>
 </html>
